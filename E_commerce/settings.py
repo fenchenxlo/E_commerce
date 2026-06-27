@@ -29,8 +29,14 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-y=)$9*krere26k&lc9wep
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = [".hf.space",]
+ALLOWED_HOSTS = [
+	"*",
+	'proxy.spaces.internal.huggingface.tech'
+]
 
+
+# 加上這行：允許 Django 讀取 X-Forwarded-Host 標頭
+USE_X_FORWARDED_HOST = True
 
 # Application definition
 
