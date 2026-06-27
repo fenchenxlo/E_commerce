@@ -23,8 +23,7 @@ gunicorn==23.0.0
 
 html5lib==1.1
 
-httpx @ file:///C:/tmp/py/py/httpx/httpx-0.28.1-py3-none-any.whl#sha256=d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad
-
+httpx=0.28.1
 importlib_metadata==9.0.0
 importlib_resources==6.5.2
 iniconfig==2.3.0
