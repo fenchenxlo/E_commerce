@@ -23,7 +23,7 @@ gunicorn==23.0.0
 
 html5lib==1.1
 
-httpx=0.28.1
+httpx==0.28.1
 importlib_metadata==9.0.0
 importlib_resources==6.5.2
 iniconfig==2.3.0
