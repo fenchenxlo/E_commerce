@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>購物車</title>
+</head>
+<body>
+
+<h1>我的購物車</h1>
+
+<!-- 訊息框架 -->
+{% if messages %}
+    <ul style="list-style:none;">
+        {% for message in messages %}
+            <li>{{ message }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<!-- 購物車商品 -->
+<table border="1" cellpadding="10">
+    <tr>
+        <th>商品名稱</th>
+        <th>單價</th>
+        <th>數量</th>
+        <th>小計</th>
+        <th>操作</th>
+    </tr>
+
+    {% for item in cart_items %}
+    <tr>
+        <!-- 商品名稱 -->
+        <td>{{ item.product.name }}</td>
+
+        <!-- 單價 -->
+        <td>{{ item.price|floatformat:2 }}</td>
+
+        <!-- 數量修改表單 -->
+        <td>
+            <form method="post" action="{% url 'update_cart_item' item.product.product_id %}">
+                {% csrf_token %}
+                <input type="number" name="quantity" value="{{ item.quantity }}" min="1" max="{{ item.product.stock }}">
+                <button type="submit">修改</button>
+            </form>
+        </td>
+
+        <!-- 小計 -->
+        <td>
+            {{ item.price|floatformat:2 }} × {{ item.quantity }} =
+            {{ item.subtotal|floatformat:2 }}
+        </td>
+
+        <!-- 刪除按鈕 -->
+        <td>
+            <form method="post" action="{% url 'remove_cart_item' item.product.product_id %}">
+                {% csrf_token %}
+                <button type="submit">刪除</button>
+            </form>
+        </td>
+    </tr>
+    {% empty %}
+    <tr>
+        <td colspan="5">
+            購物車目前沒有商品
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+
+<br>
+
+<!-- 總金額 -->
+<h3>
+    總金額：{{ total_price|floatformat:2 }}
+</h3>
+
+<!-- 結帳按鈕 -->
+{% if cart_items %}
+<form method="post" action="{% url 'checkout' %}">
+    {% csrf_token %}
+    <button type="submit">
+        結帳
+    </button>
+</form>
+{% endif %}
+
+<br>
+
+<!-- 回商城 -->
+    <button
+        class="btn"
+        onclick="location.href='http://127.0.0.1:8000/'">
+
+        回首頁
+
+    </button>
+	
+<!-- 返回首頁 
+<a href="{% url 'home' %}">
+    回首頁
+</a> -->
+
+</body>
+</html>

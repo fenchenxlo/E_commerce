@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>刪除商品確認</title>
+</head>
+<body>
+
+    <h1>刪除商品確認</h1>
+
+    <!-- 🔥 顯示要刪除的「單一商品」 -->
+    <p>
+        您確定要從訂單 <strong>{{ item.order.order_number }}</strong>
+        刪除商品
+        <strong>{{ item.product.name }}</strong> 嗎？
+        此操作無法復原。
+    </p>
+
+    <!-- 🔥 改成刪「OrderItem」 -->
+    <form method="post" action="{% url 'delete_order_item' item.id %}">
+        {% csrf_token %}
+        <button type="submit">確定刪除</button>
+
+        <!-- 回到訂單列表 -->
+        <a href="{% url 'purchased_products' %}">取消</a>
+    </form>
+
+</body>
+</html>

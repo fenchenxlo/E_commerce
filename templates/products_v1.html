@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>商品列表</title>
+</head>
+<body>
+    <h1>商品列表</h1>
+
+    {% if user.is_authenticated %}
+        <p>您好，{{ user.username }}！以下是目前的商品：</p>
+    {% else %}
+        <p>請先登入以購買商品。</p>
+    {% endif %}
+
+    <ul>
+        {% for product in products %}
+            <li>
+                <strong>{{ product.name }}</strong><br>
+                價格：{{ product.price }} 元<br>
+                庫存：{{ product.stock }}<br>
+                {% if user.is_authenticated %}
+                    <form method="post" action="#">
+                        {% csrf_token %}
+                        <button type="submit">加入購物車</button>
+                    </form>
+                {% endif %}
+            </li>
+        {% empty %}
+            <li>目前沒有商品。</li>
+        {% endfor %}
+    </ul>
+
+    <p><a href="{% url 'home' %}">回首頁</a></p>
+</body>
+</html>

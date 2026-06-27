@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>下載商品交易資料</title>
+
+    <style>
+        body{
+            font-family: Arial, sans-serif;
+            margin:40px;
+        }
+
+        .container{
+            max-width:800px;
+            margin:auto;
+        }
+
+        .info-box{
+            border:1px solid #ccc;
+            padding:20px;
+            border-radius:10px;
+            background:#f8f8f8;
+        }
+
+        .important{
+            color:red;
+            font-weight:bold;
+        }
+
+        table{
+            width:100%;
+            border-collapse: collapse;
+        }
+
+        td{
+            padding:10px;
+            border:1px solid #ddd;
+        }
+
+        .btn{
+            margin-top:20px;
+            padding:10px 20px;
+            cursor:pointer;
+        }
+
+    </style>
+</head>
+<body>
+<div class="container">
+    <h3>下載商品交易資料:</h3>
+    <div class="info-box">
+        {% if user.is_authenticated %}
+            <!-- 下載商品交易資料 -->
+            <form method="post" action="http://127.0.0.1:8001/ecpay_mock/download_orderPayment_json/">
+
+                {% csrf_token %}
+
+                <input
+                    type="textfield"
+                    name="merchant_trade_no"
+                    value=""
+                >
+
+
+                <button type="submit">
+                    下載交易資料
+                </button>
+
+            </form>
+            
+        <!-- 修改處: 將 id 改為 class 並用 data-payload 儲存訂單付款資料 
+        <button id="pay-btn" class="pay-btn" data-payload='{{ payment_payload_json|safe }}'>
+           付款完成-前往商城
+        </button> -->
+        {% else %}
+            <!-- 未登入的訪客顯示「登入」與「註冊」 -->
+            <a href="{% url 'account_login' %}">登入</a>
+            <a href="{% url 'account_signup' %}">註冊</a>
+        {% endif %}
+        
+
+    </div>    
+</div>
+
+</body>
+</html>

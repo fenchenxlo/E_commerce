@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>已購買商品清單</title>
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f5f5f5;
+        }
+        .status-pending { color: orange; }
+        .status-paid { color: blue; }
+        .status-shipped { color: green; }
+        .status-cancelled { color: red; }
+    </style>
+</head>
+<body>
+    <h1>已購買商品清單</h1>
+
+    {% if user.is_authenticated %}
+        <p>您好，{{ user.username }}！以下是您已購買的商品：</p>
+    {% else %}
+        <p>請先登入以查看已購買商品。</p>
+    {% endif %}
+
+    {% if messages %}
+        <ul style="list-style: none; padding: 0;">
+            {% for message in messages %}
+                <li 
+                    {% if message.tags == "success" %} style="color: green;"
+                    {% elif message.tags == "error" %} style="color: red;"
+                    {% elif message.tags == "warning" %} style="color: orange;"
+                    {% else %} style="color: black;" {% endif %}
+                >
+                    {{ message }}
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    {% if order_list %}
+        {% for order_dict in order_list %}
+            <h2>
+                訂單編號: {{ order_dict.order.order_number }} | 狀態: 
+                <span class="
+                    {% if order_dict.order.status == 'pending' %}status-pending
+                    {% elif order_dict.order.status == 'paid' %}status-paid
+                    {% elif order_dict.order.status == 'shipped' %}status-shipped
+                    {% elif order_dict.order.status == 'cancelled' %}status-cancelled
+                    {% endif %}
+                ">
+                    {% if order_dict.order.status == 'pending' %}待處理
+                    {% elif order_dict.order.status == 'paid' %}已付款
+                    {% elif order_dict.order.status == 'shipped' %}已出貨
+                    {% elif order_dict.order.status == 'cancelled' %}已取消
+                    {% endif %}
+                </span>
+            </h2>
+            <p>訂單總金額: {{ order_dict.order.total_amount }} 元</p>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>商品名稱</th>
+                        <th>平台</th>
+                        <th>單價</th>
+                        <th>數量</th>
+                        <th>小計</th>
+                        <th>刪除訂單</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in order_dict.items %}
+                    <tr>
+                        <td>{{ item.item.product.name }}</td>
+                        <td>{{ item.item.product.source }}</td>
+                        <td>{{ item.item.price }} 元</td>
+                        <td>{{ item.item.quantity }}</td>
+                        <td>{{ item.subtotal }} 元</td>
+                        <td>{% if order_dict.order.status == 'pending' or order_dict.order.status == 'cancelled' %}
+                            <form action="{% url 'delete_order_item' item.item.id %}" method="get" style="display:inline;">
+                                <button type="submit">
+                                    刪除訂單
+                                </button>
+                            </form>
+                        {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <!-- 訂單操作區 -->
+            <div style="margin-bottom: 40px;">
+                {% if order_dict.order.status == 'pending' %}                    
+                    <p>運費：{{ order_dict.shipping_fee }} 元</p>
+                    <p>訂單總額（含運費）：{{ order_dict.total_with_shipping|floatformat:2 }} 元</p>
+                    <script>
+                        gobal const = order_number = {{order_dict.payment_payload.MerchantTradeNo}}
+                        console.log( order_number )
+                    <!-- 修改處: 將 id 改為 class 並用 data-payload 儲存訂單付款資料 -->
+                    <button class="pay-btn${ order_number }" data-payload='{{ order_dict.payment_payload|safe }}'>
+                        前往付款
+                    </button>
+                    </script>
+                   
+                    
+                {% elif order_dict.order.status == 'paid' %}
+                    <span style="color: green;">
+                        已付款
+                    </span>
+                {% endif %}
+                
+
+
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>您目前還沒有已購買的商品。</p>
+    {% endif %}
+    
+    <!-- 💡 【修改處】將 CSRF Token 和 JavaScript 移到迴圈的最外面（下方） -->
+    {% csrf_token %}
+    <script>
+        console.log( order_number )
+        function getCSRFToken() {
+            return document.querySelector('[name=csrfmiddlewaretoken]').value
+        }
+
+        document.addEventListener("DOMContentLoaded", function(){
+            const buttons = document.querySelectorAll(".pay-btn${ order_number } ");
+            buttons.forEach(btn => {
+                btn.addEventListener("click", function(){
+                    const payload = JSON.parse(this.dataset.payload);
+                    fetch("http://127.0.0.1:8000/commerce_shop/ready_form/", {
+                        method: "POST",
+                        credentials: "include",
+                        headers: {
+                            "X-CSRFToken": getCSRFToken(),
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify(payload)
+                    })
+                    .then(res => res.text())
+                    .then(html => {
+                        document.open();
+                        document.write(html);
+                        document.close();
+                    })
+                    .catch(err => console.error(err));
+                });
+            });
+        });
+    </script>
+    
+    <p><a href="{% url 'home' %}">回首頁</a></p>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>購物車</title>
+</head>
+<body>
+
+    <h1>我的購物車</h1>
+
+    <!-- 訊息框架 -->
+    {% if messages %}
+        <ul style="list-style:none;">
+            {% for message in messages %}
+                <li>{{ message }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    <!-- 購物車商品 -->
+    <table border="1" cellpadding="10">
+
+        <tr>
+            <th>商品名稱</th>
+            <th>單價</th>
+            <th>數量</th>
+            <th>小計</th>
+        </tr>
+
+        {% for item in cart_items %}
+        <tr>
+
+            <!-- 商品名稱 -->
+            <td>{{ item.product.name }}</td>
+
+            <!-- 單價 -->
+            <td>{{ item.price }}</td>
+
+            <!-- 數量 -->
+            <td>{{ item.quantity }}</td>
+
+            <!-- 小計 -->
+            <td>
+                {{ item.price|floatformat:2 }} × {{ item.quantity }} =
+                {{ item.subtotal|floatformat:2 }}
+            </td>
+
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="4">
+                購物車目前沒有商品
+            </td>
+        </tr>
+        {% endfor %}
+
+    </table>
+
+    <br>
+
+    <!-- 總金額 -->
+    <h3>
+        總金額：{{ total_price }}
+    </h3>
+
+    <!-- 結帳按鈕 -->
+    {% if cart_items %}
+    <form method="post" action="{% url 'checkout' %}">
+        {% csrf_token %}
+        <button type="submit">
+            結帳
+        </button>
+    </form>
+    {% endif %}
+
+    <br>
+
+    <!-- 返回首頁 -->
+    <a href="{% url 'home' %}">
+        回首頁
+    </a>
+
+</body>
+</html>

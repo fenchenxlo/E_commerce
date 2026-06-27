@@ -1,0 +1,70 @@
+<h1>Fake 綠界付款頁</h1>
+
+<hr>
+
+<p>
+訂單編號：
+{{ payment.order.order_number }}
+</p>
+
+<p>
+交易編號：
+{{ payment.transaction_id }}
+</p>
+
+<p>
+付款金額：
+{{ payment.amount }}
+</p>
+
+<hr>
+
+<h3>模擬付款</h3>
+
+<!-- 付款成功 -->
+<form method="post" action="{% url 'fake_ecpay_callback' %}">
+
+    {% csrf_token %}
+
+    <input
+        type="hidden"
+        name="transaction_id"
+        value="{{ payment.transaction_id }}"
+    >
+
+    <input
+        type="hidden"
+        name="status"
+        value="success"
+    >
+
+    <button type="submit">
+        模擬付款成功
+    </button>
+
+</form>
+
+<br>
+
+<!-- 付款失敗 -->
+<form method="post" action="{% url 'fake_ecpay_callback' %}">
+
+    {% csrf_token %}
+
+    <input
+        type="hidden"
+        name="transaction_id"
+        value="{{ payment.transaction_id }}"
+    >
+
+    <input
+        type="hidden"
+        name="status"
+        value="failed"
+    >
+
+    <button type="submit">
+        模擬付款失敗
+    </button>
+
+</form>

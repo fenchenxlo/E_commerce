@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>已購買商品清單</title>
+</head>
+<body>
+    <h1>已購買商品清單</h1>
+
+    {% if user.is_authenticated %}
+        <p>您好，{{ user.username }}！以下是您已購買的商品：</p>
+    {% else %}
+        <p>請先登入以查看已購買商品。</p>
+    {% endif %}
+
+    {% if messages %}
+        <ul style="list-style: none; padding: 0;">
+            {% for message in messages %}
+                <li 
+                    {% if message.tags == "success" %} style="color: green;"
+                    {% elif message.tags == "error" %} style="color: red;"
+                    {% elif message.tags == "warning" %} style="color: orange;"
+                    {% else %} style="color: black;" {% endif %}
+                >
+                    {{ message }}
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    <ul>
+        {% for product in products %}
+            <li>
+                商品名稱:<strong>{{ product.name }}</strong><br>
+				平台:<strong>{{ product.source }}</strong><br>
+                價格：{{ product.price }} 元<br>
+                庫存：{{ product.stock }}<br>
+                狀態：
+                {% if product.is_deleted %}
+                    <span style="color:red;">已下架</span>
+                {% else %}
+                    <span style="color:green;">上架中</span>
+                {% endif %}
+            </li>
+        {% empty %}
+            <li>您目前還沒有已購買的商品。</li>
+        {% endfor %}
+    </ul>
+
+    <p><a href="{% url 'home' %}">回首頁</a></p>
+</body>
+</html>

@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>下載商品交易資料</title>
+
+    <style>
+        body{
+            font-family: Arial, sans-serif;
+            margin:40px;
+        }
+
+        .container{
+            max-width:800px;
+            margin:auto;
+        }
+
+        .info-box{
+            border:1px solid #ccc;
+            padding:20px;
+            border-radius:10px;
+            background:#f8f8f8;
+        }
+
+        .important{
+            color:red;
+            font-weight:bold;
+        }
+
+        table{
+            width:100%;
+            border-collapse: collapse;
+        }
+
+        td{
+            padding:10px;
+            border:1px solid #ddd;
+        }
+
+        .btn{
+            margin-top:20px;
+            padding:10px 20px;
+            cursor:pointer;
+        }
+
+    </style>
+</head>
+<body>
+<div class="container">
+    <h3>下載商品交易資料:</h3>
+    <div class="info-box">
+        {% if user.is_authenticated %}
+            <!-- 下載商品交易資料 -->
+            <input  id ="merchant_trade_no_value"
+                    type="textfield"
+                    name="merchant_trade_no"
+                    value=""
+                >
+            <!-- 修改處: 將 id 改為 class 並用 data-payload 儲存訂單付款資料 -->
+            <button id="pay-btn" class="pay-btn">
+               展示商品交易資料
+            </button>
+            <button id="download-json-btn">
+                下載 JSON
+            </button>
+            <p></p>
+            <div id="json_content" class="info-box"></div>              
+            {% csrf_token %}
+            <script>
+                let currentData = null;
+                
+                function 加入網頁內容(data) {
+                    currentData = data;
+                    console.log("加入網頁內容收到:", data);
+
+                    if (data.error) {
+                        document.getElementById("json_content").innerHTML =
+                            `<p style="color:red">${data.error}</p>`;
+                        return;
+                    }
+                    
+                    document.getElementById("json_content").innerHTML += `
+                       
+                            <div class="container">
+
+                            <h2>交易資料明細</h2>
+
+                            <div class="info-box">
+
+                                <h3>訂單資訊</h3>
+
+                                <table>
+
+                                    <tr>
+                                        <td class="label">商店訂單編號</td>
+                                        <td>${data.merchant_trade_no}</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td class="label">會員ID</td>
+                                        <td>${data.order_info.user_id}</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td class="label">收件人</td>
+                                        <td>${data.order_info.receiver_name}</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td class="label">訂單金額</td>
+                                        <td>${data.order_info.amount}</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td class="label">訂單狀態</td>
+                                        <td>${data.order_info.status}</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td class="label">建立時間</td>
+                                        <td>${data.order_info.created_at}</td>
+                                    </tr>
+
+                                </table>
+
+                            </div>
+
+                            <div class="card">
+
+                                <h3>付款請求資料</h3>
+
+                                <table>
+
+                                    <tr>
+                                        <td class="label">Merchant ID</td>
+                                        <td>${data.payment_request.merchant_id}</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td class="label">交易日期</td>
+                                        <td>${data.payment_request.merchant_trade_date}</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td class="label">交易說明</td>
+                                        <td>${data.payment_request.trade_desc}</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td class="label">商品名稱</td>
+                                        <td>${data.payment_request.item_name}</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td class="label">付款方式</td>
+                                        <td>${data.payment_request.choose_payment}</td>
+                                    </tr>
+
+                                </table>
+
+                            </div>
+
+                            <div class="card">
+
+                                <h3>ATM資訊</h3>
+
+                                <table>
+
+                                    <tr>
+                                        <td class="label">銀行代碼</td>
+                                        <td>${data.atm_response.bank_code}</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td class="label">虛擬帳號</td>
+                                        <td>${data.atm_response.v_account}</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td class="label">繳費期限</td>
+                                        <td>${data.atm_response.expire_date}</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td class="label">綠界交易編號</td>
+                                        <td>${data.atm_response.trade_no}</td>
+                                    </tr>
+
+                                </table>
+
+                            </div>
+
+                            <div class="card">
+
+                                <h3>付款結果</h3>
+
+                                <table>
+
+                                    <tr>
+                                        <td class="label">交易金額</td>
+                                        <td>${data.payment_notification.trade_amt}</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td class="label">付款時間</td>
+                                        <td>${data.payment_notification.payment_date}</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td class="label">回傳碼</td>
+                                        <td>${data.payment_notification.rtn_code}</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td class="label">回傳訊息</td>
+                                        <td class="success">
+                                            ${data.payment_notification.rtn_msg}
+                                        </td>
+                                    </tr>
+
+                                    <tr>
+                                        <td class="label">模擬付款</td>
+                                        <td>
+                                            ${data.payment_notification.simulate_paid}
+                                        </td>
+                                    </tr>
+
+                                </table>
+
+                            </div>
+
+
+                            </div>
+                        `;
+                }
+                
+                document.getElementById("download-json-btn")
+                        .addEventListener("click", () => {
+
+                            if (!currentData) {
+                                alert("請先查詢資料");
+                                return;
+                            }
+
+                            const blob = new Blob(
+                                [
+                                    JSON.stringify(
+                                        currentData,
+                                        null,
+                                        4
+                                    )
+                                ],
+                                {
+                                    type: "application/json"
+                                }
+                            );
+
+                            const url = URL.createObjectURL(blob);
+
+                            const a = document.createElement("a");
+
+                            a.href = url;
+
+                            a.download =
+                                currentData.merchant_trade_no + ".json";
+
+                            a.click();
+
+                            URL.revokeObjectURL(url);
+                        });
+                
+                function getCSRFToken() {
+                    return document.querySelector('[name=csrfmiddlewaretoken]').value
+                }
+                
+                // 簡潔的方式: 
+                document.getElementById("pay-btn")
+                    .addEventListener("click", async () => {
+                        const merchantTradeNo = document.getElementById("merchant_trade_no_value").value;
+                        console.log("merchantTradeNo =", merchantTradeNo);
+                        
+                        const response = await fetch(
+                            "http://127.0.0.1:8001/gateway/download_orderPayment_json/",
+                            {
+                                method: "POST",
+                                headers: {
+                                    "X-CSRFToken": getCSRFToken(),
+                                    "Content-Type": "application/json"
+                                },
+                                body: JSON.stringify({
+                                    merchant_trade_no: merchantTradeNo
+                                })
+                            }
+                        );
+
+                        const data = await response.json();
+                        console.log("收到資料:", data);
+                        console.log("是否為Array:", Array.isArray(data));
+
+                        加入網頁內容(data);
+                    });
+                                    
+            </script>
+        {% else %}
+            <!-- 未登入的訪客顯示「登入」與「註冊」 -->
+            <a href="{% url 'account_login' %}">登入</a>
+            <a href="{% url 'account_signup' %}">註冊</a>
+        {% endif %}       
+
+    </div>    
+</div>
+
+</body>
+</html>

@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>刪除訂單確認</title>
+</head>
+<body>
+    <h1>刪除訂單確認</h1>
+    <p>您確定要刪除訂單編號 <strong>{{ order.order_number }}</strong> 嗎？此操作無法復原。</p>
+
+    <form method="post" action="{% url 'delete_order' order.id %}">
+        {% csrf_token %}
+        <button type="submit">確定刪除</button>
+        <a href="{% url 'purchased_products' %}">取消</a>
+    </form>
+</body>
+</html>
