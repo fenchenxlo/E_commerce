@@ -183,9 +183,9 @@ STORAGES = {
 CORS_ALLOW_ALL_ORIGINS = False
 
 CORS_ALLOWED_ORIGINS = [
-	"https://huggingface.co/spaces/monzid1-ecommerce.hf.space"
-	"https://huggingface.co/spaces/monzid1-ecpay-mock.hf.space"
-	"https://huggingface.co/spaces/monzid1-bank-site.hf.space"
+	"https://huggingface.co/spaces/monzid1-ecommerce.hf.space",
+	"https://huggingface.co/spaces/monzid1-ecpay-mock.hf.space",
+	"https://huggingface.co/spaces/monzid1-bank-site.hf.space",
 #    "http://127.0.0.1:8001",   # React/Vue 本地端 3000
 #    "http://localhost:8001",
 ]
@@ -200,9 +200,9 @@ SESSION_COOKIE_SECURE = True
 
 # CSRF 白名單 (允許的前端來源)
 CSRF_TRUSTED_ORIGINS = [
-	"https://huggingface.co/spaces/monzid1-ecommerce.hf.space"
-	"https://huggingface.co/spaces/monzid1-ecpay-mock.hf.space"
-	"https://huggingface.co/spaces/monzid1-bank-site.hf.space"
+	"https://huggingface.co/spaces/monzid1-ecommerce.hf.space",
+	"https://huggingface.co/spaces/monzid1-ecpay-mock.hf.space",
+	"https://huggingface.co/spaces/monzid1-bank-site.hf.space",
 #    "http://127.0.0.1:8001",
 #    "http://localhost:8001",
 ]
