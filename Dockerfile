@@ -16,4 +16,5 @@ RUN python manage.py collectstatic --noinput
 
 EXPOSE 7860
 
-CMD sh -c "python manage.py migrate && gunicorn E_commerce.wsgi:application --bind 0.0.0.0:7860"
+#CMD sh -c "python manage.py migrate && gunicorn E_commerce.wsgi:application --bind 0.0.0.0:7860"
+CMD sh -c "python manage.py migrate; gunicorn E_commerce.wsgi:application --bind 0.0.0.0:7860"
