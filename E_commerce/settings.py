@@ -34,6 +34,8 @@ ALLOWED_HOSTS = [
 	'proxy.spaces.internal.huggingface.tech'
 ]
 
+# 關鍵: 允許Hugging Face 的Iframe 嵌入你的網站,否則畫面會空白
+X_FRAME_OPTIONS = "ALLOW-FROM https://huggingface.co"
 
 # 加上這行：允許 Django 讀取 X-Forwarded-Host 標頭
 USE_X_FORWARDED_HOST = True
@@ -171,10 +173,11 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / "staticfiles"   # 加這行
 STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
-STATIC_ROOT = BASE_DIR / "staticfiles"   # 加這行
+
 
 STORAGES = {
     "staticfiles": {
@@ -190,7 +193,7 @@ STORAGES = {
 CORS_ALLOW_ALL_ORIGINS = False
 
 CORS_ALLOWED_ORIGINS = [
-	"https://hf.space",
+	"https://*.hf.space",
 #	"https://huggingface.co/spaces/monzid1-ecommerce.hf.space",
 #	"https://huggingface.co/spaces/monzid1-ecpay-mock.hf.space",
 #	"https://huggingface.co/spaces/monzid1-bank-site.hf.space",
@@ -208,7 +211,7 @@ SESSION_COOKIE_SECURE = True
 
 # CSRF 白名單 (允許的前端來源)
 CSRF_TRUSTED_ORIGINS = [
-	"https://hf.space",
+	"https://*.hf.space",
 #	"https://huggingface.co/spaces/monzid1-ecommerce.hf.space",
 #	"https://huggingface.co/spaces/monzid1-ecpay-mock.hf.space",
 #	"https://huggingface.co/spaces/monzid1-bank-site.hf.space",
