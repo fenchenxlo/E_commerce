@@ -6,8 +6,13 @@ ENV PYTHONUNBUFFERED=1
 
 # 建立並切換到非 ROOT 使用者(Hugging Face Spaces 規定,UID 1000)
 RUN useradd -m -u 1000 user
+
+#ENV HOME=/home/user \ PATH=/home/user/.local/bin:$PATH
+# 修正處：將環境變數分開設定，確保 PATH 正確繼承
+ENV HOME=/home/user
+ENV PATH="/home/user/.local/bin:${PATH}"
+
 USER user
-ENV HOME=/home/user \ PATH=/home/user/.local/bin:$PATH
 
 WORKDIR $HOME/app
 
