@@ -14,7 +14,7 @@ WORKDIR $HOME/app
 #WORKDIR /app
 
 COPY --chown=user requirements.txt .
-RUN pip install --no-cache-dir -r --upgrade pip && \ 
+RUN pip install --no-cache-dir --upgrade pip && \ 
     pip install --no-cache-dir -r requirements.txt
 
 COPY --chown=user . .
