@@ -194,6 +194,7 @@ CORS_ALLOW_ALL_ORIGINS = False
 
 CORS_ALLOWED_ORIGINS = [
 	"https://*.hf.space",
+	"https://huggingface.co",
 #	"https://huggingface.co/spaces/monzid1-ecommerce.hf.space",
 #	"https://huggingface.co/spaces/monzid1-ecpay-mock.hf.space",
 #	"https://huggingface.co/spaces/monzid1-bank-site.hf.space",
@@ -203,18 +204,35 @@ CORS_ALLOWED_ORIGINS = [
 
 # 如果要允許所有來源 (開發用)
 # CORS_ALLOW_ALL_ORIGINS = False
+# 確保 Cookie 只能透過 HTTPS 傳輸
+CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = True
+
+# 允許跨站（Cross-site）請求攜帶 Cookie (解決 iframe 嵌入問題)
+CSRF_COOKIE_SAMESITE = 'None'
+SESSION_COOKIE_SAMESITE = 'None'
 
 # 允許跨域攜帶 Cookie
 CORS_ALLOW_CREDENTIALS = True
-SESSION_COOKIE_SAMESITE = None
+SESSION_COOKIE_SAMESITE = 'None'
 SESSION_COOKIE_SECURE = True
 
 # CSRF 白名單 (允許的前端來源)
+# 允許 Hugging Face Spaces 的網域進行 CSRF 驗證
 CSRF_TRUSTED_ORIGINS = [
-	"https://*.hf.space",
+    "https://*.hf.space",
+    "https://huggingface.co",
+]
+
+# 如果你使用的是較新版的 Django (例如 4.x/5.x/6.x)，建議也加上這行
+# 允許跨域傳送 Cookie
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+#CSRF_TRUSTED_ORIGINS = [
+#	"https://*.hf.space",
 #	"https://huggingface.co/spaces/monzid1-ecommerce.hf.space",
 #	"https://huggingface.co/spaces/monzid1-ecpay-mock.hf.space",
 #	"https://huggingface.co/spaces/monzid1-bank-site.hf.space",
 #    "http://127.0.0.1:8001",
 #    "http://localhost:8001",
-]
+#]
