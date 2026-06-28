@@ -31,10 +31,13 @@ RUN python manage.py collectstatic --noinput
 EXPOSE 7860
 
 # 啟動指定
+# 刪除或註解掉原本的 CMD ["gunicorn", ...]
+# 改成以下這行：
+CMD ["sh", "-c", "python manage.py migrate && python -m gunicorn --bind 0.0.0.0:7860 --workers 4 --timeout 120 --access-logfile - E_commerce.wsgi:application"]
 #CMD sh -c "python manage.py migrate && gunicorn E_commerce.wsgi:application --bind 0.0.0.0:7860"
-CMD ["gunicorn", \
-     "--bind", "0.0.0.0:7860", \
-	 "--workers", "4", \
-	 "--timeout", "120", \
-	 "--access-logfile", "-", \
-	 "E_commerce.wsgi:application"]
+#CMD ["gunicorn", \
+#     "--bind", "0.0.0.0:7860", \
+#	 "--workers", "4", \
+#	 "--timeout", "120", \
+#	 "--access-logfile", "-", \
+#	 "E_commerce.wsgi:application"]
