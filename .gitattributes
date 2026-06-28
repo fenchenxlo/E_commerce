@@ -53,3 +53,4 @@ static/iphone17/i17promax-藏藍色.jpg filter=lfs diff=lfs merge=lfs -text
 static/iphone17/i17promax-cosmic_orange.jpg filter=lfs diff=lfs merge=lfs -text
 static/iphone17/i17promax-deep_blue.jpg filter=lfs diff=lfs merge=lfs -text
 static/iphone17/i17promax-silver.jpg filter=lfs diff=lfs merge=lfs -text
+db.sqlite3 filter=lfs diff=lfs merge=lfs -text
