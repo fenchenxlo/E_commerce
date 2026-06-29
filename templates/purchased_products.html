@@ -124,7 +124,8 @@
                             buttons.forEach(btn => {
                                 btn.addEventListener("click", function(){
                                     const payload = JSON.parse(this.dataset.payload);  // 讀取對應的 payload
-                                    fetch("http://127.0.0.1:8000/commerce_shop/ready_form/", {
+                                    //fetch("http://127.0.0.1:8000/commerce_shop/ready_form/", {
+									fetch("/commerce_shop/ready_form/", {
                                         method: "POST",
                                         credentials: "include",
                                         headers: {
@@ -162,7 +163,7 @@
     <!-- 回商城 -->
     <button
         class="btn"
-        onclick="location.href='http://127.0.0.1:8000/'">
+        onclick="location.href='{{ order_list.backend_url}}'">
 
         回首頁
 
