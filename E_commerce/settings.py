@@ -13,13 +13,13 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 from pathlib import Path
 from .settings_email import *
 from django.utils.csp import CSP
-import django
+#import django
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-print(f"Django version: {django.__version__}")
+#print(f"Django version: {django.__version__}")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
@@ -113,7 +113,8 @@ ECPAY_HASH_IV = "EkRm7iFT261dpevs"
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",  # 放在最前面
     'django.middleware.csrf.CsrfViewMiddleware',
-    'django.middleware.security.SecurityMiddleware',
+#    'django.middleware.security.SecurityMiddleware',
+    'django.middleware.csp.ContentSecurityPolicyMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -121,7 +122,7 @@ MIDDLEWARE = [
     'allauth.account.middleware.AccountMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    "django.middleware.security.ContentSecurityPolicyMiddleware",
+#    "django.middleware.security.ContentSecurityPolicyMiddleware",
 ]
 
 # CSP 設定（包含允許 HuggingFace iframe）
