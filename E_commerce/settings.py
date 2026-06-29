@@ -128,7 +128,8 @@ MIDDLEWARE = [
 # CSP 設定（包含允許 HuggingFace iframe）
 SECURE_CSP = {
     "default-src": [CSP.SELF],
-    "script-src": [CSP.SELF],
+    "style-src": [CSP.SELF, CSP.UNSAFE_INLINE],   # 允許 inline style   
+    "script-src": [CSP.SELF, CSP.UNSAFE_INLINE],  # 允許 inline script
     "img-src": [CSP.SELF, "https:"],
     "frame-ancestors": ["https://huggingface.co"],  # 允許 HF 嵌入
 }
