@@ -156,18 +156,27 @@
 
             </div>
         {% endfor %}
+        <!-- 回商城 -->
+        <button
+            class="btn"
+            onclick="location.href='{{ order_list.backend_url}}'">
+    
+            回首頁
+    
+        </button>
     {% else %}
         <p>您目前還沒有已購買的商品。</p>
+        <!-- 回商城 -->
+        <button
+            class="btn"
+            onclick="location.href='{{ order_list.backend_url}}'">
+    
+            回首頁
+    
+        </button>
     {% endif %}
     
-    <!-- 回商城 -->
-    <button
-        class="btn"
-        onclick="location.href='{{ order_list.backend_url}}'">
-
-        回首頁
-
-    </button>
+    
    <!-- <p><a href="{% url 'home' %}">回首頁</a></p> -->
 </body>
 </html>
