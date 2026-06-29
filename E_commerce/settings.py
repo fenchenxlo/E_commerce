@@ -49,7 +49,8 @@ ALLOWED_HOSTS = [
 ]
 
 # 關鍵: 允許Hugging Face 的Iframe 嵌入你的網站,否則畫面會空白
-X_FRAME_OPTIONS = "ALLOW-FROM https://huggingface.co"
+#X_FRAME_OPTIONS = "ALLOW-FROM https://huggingface.co"
+Content-Security-Policy: frame-ancestors https://huggingface.co
 
 # 加上這行：允許 Django 讀取 X-Forwarded-Host 標頭
 USE_X_FORWARDED_HOST = True
