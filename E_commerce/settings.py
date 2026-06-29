@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 from pathlib import Path
 from .settings_email import *
 from django.utils.csp import CSP
+import django
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
