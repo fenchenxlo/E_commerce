@@ -46,7 +46,7 @@ else:
 
 ALLOWED_HOSTS = [
 	'monzid1-e-commerce.hf.space',
-	'proxy.spaces.internal.huggingface.tech,
+	'proxy.spaces.internal.huggingface.tech',
 ]
 
 # 關鍵: 允許Hugging Face 的Iframe 嵌入你的網站,否則畫面會空白
