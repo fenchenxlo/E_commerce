@@ -29,6 +29,8 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-y=)$9*krere26k&lc9wep
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
+BACKEND_URL = ""
+
 if "SPACE_HOST" in os.environ:
     # 優先使用官方直接提供的完整網域 (例如: monzid1-e-commerce.hf.space)
     BACKEND_URL = f"https://{os.environ.get('SPACE_HOST')}"
