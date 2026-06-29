@@ -545,6 +545,7 @@ def purchased_products(request):
             'shipping_fee': shipping_fee,           # 運費
             'total_with_shipping': total_with_shipping,  # 含運費總額
             'payment_payload': payment_payload,   # ✅ 新增這個 dict
+			'backend_url': BACKEND_URL,
         })
 
     # 將整理好的訂單列表傳給模板
@@ -562,7 +563,7 @@ def ready_form(request):
 
     payment_payload = json.loads(request.body)
 
-#     gateway_url = "http://127.0.0.1:8001/gateway/ecpay_gateway_checkout/"
+#     gateway_url = f"http://127.0.0.1:8001/gateway/ecpay_gateway_checkout/"
 
     html = f"""
     <!DOCTYPE html>
