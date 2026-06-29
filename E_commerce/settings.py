@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 from pathlib import Path
 from .settings_email import *
+from django.utils.csp import CSP
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -119,7 +120,16 @@ MIDDLEWARE = [
     'allauth.account.middleware.AccountMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "django.middleware.security.ContentSecurityPolicyMiddleware",
 ]
+
+# CSP 設定（包含允許 HuggingFace iframe）
+SECURE_CSP = {
+    "default-src": [CSP.SELF],
+    "script-src": [CSP.SELF],
+    "img-src": [CSP.SELF, "https:"],
+    "frame-ancestors": ["https://huggingface.co"],  # 允許 HF 嵌入
+}
 
 ROOT_URLCONF = 'E_commerce.urls'
 
@@ -133,6 +143,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'django.template.context_processors.csp',
             ],
         },
     },
