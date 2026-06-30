@@ -300,7 +300,7 @@ def payment_error(request):
 @login_required
 def download_orderPayment_json(request):
     
-    return render(request, 'download_order_payment_data.html')
+    return render(request, 'download_order_payment_data.html',{'backend_url': BACKEND_URL})
 
 @login_required
 def product_list(request):
