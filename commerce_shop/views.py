@@ -382,6 +382,7 @@ def cart_detail(request):
         {
             'cart_items': cart_items,
             'total_price': total_price,
+            'backend_url': BACKEND_URL,
         }
     )
 
