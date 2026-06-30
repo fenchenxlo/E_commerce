@@ -311,11 +311,16 @@
             <!-- 未登入的訪客顯示「登入」與「註冊」 -->
             <a href="{% url 'account_login' %}">登入</a>
             <a href="{% url 'account_signup' %}">註冊</a>
-        {% endif %}       
+        {% endif %}
         <!-- 回商城 -->
+        <!-- onclick="location.href='http://127.0.0.1:8000/'"> -->
+        <button class="btn" onclick="location.href='{{backend_url}}'">
+            回首頁
+        </button> 
+        <!-- 回商城 
         <button class="btn" onclick="location.href='http://127.0.0.1:8000/'">
             回首頁
-        </button>
+        </button> -->
     </div>    
 </div>
 
