@@ -1016,6 +1016,7 @@ def payment_ok(request):
             'shipping_fee': shipping_fee,           # 運費
             'total_with_shipping': total_with_shipping,  # 含運費總額
             'payment_payload': payment_payload,   # ✅ 新增這個 dict
+			'backend_url': BACKEND_URL,
         })
     
     # 把訂單資料丟給 purchased_products.html
