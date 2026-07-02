@@ -1,43 +1,58 @@
+# 使用官方 Python 3.14 精簡版 image 作為基礎環境（slim 版本體積較小，減少 build 時間與 image 大小）
 FROM python:3.14-slim
 
-# 設定環境變數:不產生.pyc檔案,且log及時輸出方便在HF Logs查看
+# 設定環境變數：不產生 .pyc 快取檔案，避免容器內累積不必要的檔案
 ENV PYTHONDONTWRITEBYTECODE=1
+
+# 設定環境變數：Python 輸出即時顯示（不緩衝），確保 print/log 能即時出現在 HF Logs / docker logs 裡
 ENV PYTHONUNBUFFERED=1
 
-# 建立並切換到非 ROOT 使用者(Hugging Face Spaces 規定,UID 1000)
+# 建立一個名為 user 的非 root 使用者，UID 指定為 1000
+# (Hugging Face Spaces 規定容器內必須用非 root 身份執行，且 UID 需為 1000)
+# -m 代表順便建立該使用者的家目錄 (/home/user)
 RUN useradd -m -u 1000 user
 
-#ENV HOME=/home/user \ PATH=/home/user/.local/bin:$PATH
-# 修正處：將環境變數分開設定，確保 PATH 正確繼承
+# 設定 HOME 環境變數，指向剛剛建立的使用者家目錄
 ENV HOME=/home/user
+
+# 把使用者的本機安裝路徑 (~/.local/bin) 加進 PATH 最前面
+# 這樣之後用 pip install --user 裝的可執行檔才能被系統找到並執行
+# ${PATH} 代表沿用 base image 原本內建的系統路徑，不是從零開始設定
 ENV PATH="/home/user/.local/bin:${PATH}"
 
+# 切換成非 root 使用者身份執行後續所有指令（安全性考量，也符合 HF 規定）
 USER user
 
+# 設定工作目錄為 使用者家目錄底下的 app 資料夾 (即 /home/user/app)
+# 之後的 COPY、RUN 等指令都會以這裡為基準路徑
 WORKDIR $HOME/app
 
-#WORKDIR /app
-
+# 先單獨複製 requirements.txt 進容器（--chown=user 確保檔案屬於 user，避免權限問題）
+# 這樣做是為了善用 Docker 分層快取：只要 requirements.txt 沒變，之後重新 build 就不用重跑 pip install，加快 build 速度
 COPY --chown=user requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \ 
+
+# 先升級 pip 本身，再依照 requirements.txt 安裝所有套件
+# --no-cache-dir：不保留 pip 下載快取，減少 image 體積
+RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
+# 複製專案所有其餘的檔案進容器（放在 pip install 之後，這樣改動程式碼不會讓套件安裝快取失效）
 COPY --chown=user . .
 
-# 執行靜態檔案收集(這會把 BS5 的 CSS/JS 整理到 staticfiles 資料夾)
+# 執行 Django 靜態檔案收集指令，把所有 static 檔案（CSS/JS/圖片等）彙整到 STATIC_ROOT 資料夾
+# --noinput：跳過互動式確認提示，避免 build 過程卡住
 RUN python manage.py collectstatic --noinput
 
-# 開放 Port 7860 (Hugging Face 規定)
-EXPOSE 7860
+# 設定預設監聽的 port（若部署平台有自動注入 PORT 環境變數，會覆蓋這個預設值，達成跨平台通用）
+ENV PORT=7860
 
-# 啟動指定
-# 刪除或註解掉原本的 CMD ["gunicorn", ...]
-# 改成以下這行：
-CMD ["sh", "-c", "python manage.py migrate && python -m gunicorn --bind 0.0.0.0:7860 --workers 4 --timeout 120 --access-logfile - E_commerce.wsgi:application"]
-#CMD sh -c "python manage.py migrate && gunicorn E_commerce.wsgi:application --bind 0.0.0.0:7860"
-#CMD ["gunicorn", \
-#     "--bind", "0.0.0.0:7860", \
-#	 "--workers", "4", \
-#	 "--timeout", "120", \
-#	 "--access-logfile", "-", \
-#	 "E_commerce.wsgi:application"]
+# 對外宣告此容器會使用的 port（僅為文件/中介層用途，實際對外映射需看部署平台如何處理）
+EXPOSE ${PORT}
+
+# 容器啟動時執行的指令：
+# 1. 先執行資料庫 migration（同步資料庫 schema）
+# 2. 再啟動 gunicorn 伺服器，監聽 0.0.0.0:$PORT（0.0.0.0 才能接受外部連線）
+#    --workers 4：開 4 個工作行程處理請求
+#    --timeout 120：單一請求超過 120 秒未回應則視為逾時
+#    --access-logfile -：將 access log 導向標準輸出，方便在平台的 Logs 頁面即時查看
+CMD ["sh", "-c", "python manage.py migrate && python -m gunicorn --bind 0.0.0.0:${PORT} --workers 4 --timeout 120 --access-logfile - E_commerce.wsgi:application"]
