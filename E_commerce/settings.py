@@ -106,8 +106,8 @@ ACCOUNT_SIGNUP_FIELDS = ['email*', 'username*', 'password1*', 'password2*']
 
 # 綠界測試環境
 ECPAY_MERCHANT_ID = "3002607"
-ECPAY_HASH_KEY = "pwFHCqoQZGmho4w6"
-ECPAY_HASH_IV = "EkRm7iFT261dpevs"
+ECPAY_HASH_KEY = os.environ.get('ECPAY_HASH_KEY', '')
+ECPAY_HASH_IV = os.environ.get('ECPAY_HASH_IV', '')
 
 
 MIDDLEWARE = [
