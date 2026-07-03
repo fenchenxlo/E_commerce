@@ -1,0 +1,9 @@
+# .gitignore（給 git 用，擋掉不要進 repo 版本控制的檔案）
+__pycache__/
+*.pyc
+.env
+venv/
+env/
+db.sqlite3
+.DS_Store
+node_modules
