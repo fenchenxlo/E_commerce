@@ -17,7 +17,7 @@ from util.product_image_config import get_product_image
 
 from E_commerce.settings import ECPAY_HASH_KEY,ECPAY_HASH_IV,BACKEND_URL
 from django.core.paginator import Paginator
-import re
+import re,os
 from django.db.models import Q
 
 def home(request):
@@ -461,6 +461,9 @@ def purchased_products(request):
 
     user = request.user
     
+    HF_SPACE_E_COMMERCE_URL = os.environ.get('HF_SPACE_E_COMMERCE_URL', '')
+    HF_SPACE_ECPAY_MOCK_URL = os.environ.get('HF_SPACE_ECPAY_MOCK_URL', '')
+    
     # 取得該使用者所有訂單，依照建立時間排序（最新的在前）
     orders = Order.objects.filter(user=user).order_by('-created_at')
     
@@ -530,7 +533,7 @@ def purchased_products(request):
             'ReturnURL': "http://127.0.0.1:8000/commerce_shop/ecpay_mock_notify/",   # server-to-server callback, # 綠界回傳 URL
             'PaymentInfoUrl': "http://127.0.0.1:8000/commerce_shop/payment_info/",   # 綠界通知商城已取得虛擬帳號
             'OrderResultURL': "http://127.0.0.1:8000/commerce_shop/payment_ok/",  # browser redirect ,瀏覽器跳轉 URL
-            'action_url': "http://127.0.0.1:8001/gateway/ecpay_gateway_checkout/",
+            'action_url': f"{HF_SPACE_ECPAY_MOCK_URL}/gateway/ecpay_gateway_checkout/",
 #             "BankCode": bank_code,
 #             "vAccount": atm_account,
 #             "ExpireDate": expire_date,
