@@ -46,7 +46,22 @@ elif "SPACE_ID" in os.environ:
 else:
     # 本地開發環境
     BACKEND_URL = "http://127.0.0.1:8000"
-
+    
+if "HF_SPACE_E_COMMERCE_URL" in os.environ:
+    HF_SPACE_E_COMMERCE_URL = os.environ.get('HF_SPACE_E_COMMERCE_URL', '')
+else:
+    HF_SPACE_E_COMMERCE_URL = "http://127.0.0.1:8000"
+    
+if "HF_SPACE_ECPAY_MOCK_URL" == os.eviron:
+    HF_SPACE_ECPAY_MOCK_URL = os.environ.get('HF_SPACE_ECPAY_MOCK_URL', '')
+else:
+    HF_SPACE_ECPAY_MOCK_URL = "http://127.0.0.1:8001"
+    
+if "HF_SPACE_BANK_SITE_URL" == os.eviron:
+    HF_SPACE_BANK_SITE_URL = os.environ.get('HF_SPACE_BANK_SITE_URL', '')
+else:
+    HF_SPACE_BANK_SITE_URL = "http://127.0.0.1:8002"
+    
 ALLOWED_HOSTS = [
 	'monzid1-e-commerce.hf.space',
 	'proxy.spaces.internal.huggingface.tech',
