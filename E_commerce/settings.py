@@ -47,24 +47,10 @@ else:
     # 本地開發環境
     BACKEND_URL = "http://127.0.0.1:8000"
 
-HF_SPACE_E_COMMERCE_URL = ""
-HF_SPACE_ECPAY_MOCK_URL = ""
-HF_SPACE_BANK_SITE_URL = ""
+HF_SPACE_E_COMMERCE_URL = os.environ.get('HF_SPACE_E_COMMERCE_URL', 'http://127.0.0.1:8000')
+HF_SPACE_ECPAY_MOCK_URL = os.environ.get('HF_SPACE_ECPAY_MOCK_URL', 'http://127.0.0.1:8001')
+HF_SPACE_BANK_SITE_URL = os.environ.get('HF_SPACE_BANK_SITE_URL', 'http://127.0.0.1:8002')
 
-if "HF_SPACE_E_COMMERCE_URL" in os.environ:
-    HF_SPACE_E_COMMERCE_URL = os.environ.get('HF_SPACE_E_COMMERCE_URL', '')
-else:
-    HF_SPACE_E_COMMERCE_URL = "http://127.0.0.1:8000"
-    
-if "HF_SPACE_ECPAY_MOCK_URL" in os.environ:
-    HF_SPACE_ECPAY_MOCK_URL = os.environ.get('HF_SPACE_ECPAY_MOCK_URL', '')
-else:
-    HF_SPACE_ECPAY_MOCK_URL = "http://127.0.0.1:8001"
-    
-if "HF_SPACE_BANK_SITE_URL" in os.environ:
-    HF_SPACE_BANK_SITE_URL = os.environ.get('HF_SPACE_BANK_SITE_URL', '')
-else:
-    HF_SPACE_BANK_SITE_URL = "http://127.0.0.1:8002"
     
 ALLOWED_HOSTS = [
 	'monzid1-e-commerce.hf.space',
