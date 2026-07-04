@@ -16,7 +16,7 @@ Including another URLconf
 """
 from django.urls import path,include
 from commerce_shop.views import (
-    home,
+#    home,
     api_search,
     product_list,
     add_to_cart,
@@ -44,7 +44,7 @@ from commerce_shop.views import (
 # app_name = "commerce_shop"   # ⭐ 就是這一行 
 
 urlpatterns = [    
-    path('', home, name='home'),
+#    path('', home, name='home'),
     path('api_search/', api_search, name='api_search'),
     path('products/', product_list, name='product_list'),
     path('products/add/<int:product_id>/', add_to_cart, name='add_to_cart'),
