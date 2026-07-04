@@ -15,7 +15,7 @@ import urllib.parse
 from util.ChkMacVal import generate_check_mac_value
 from util.product_image_config import get_product_image
 
-from E_commerce.settings import ECPAY_HASH_KEY,ECPAY_HASH_IV,BACKEND_URL,HF_SPACE_ECPAY_MOCK_URL
+from E_commerce.settings import ECPAY_HASH_KEY,ECPAY_HASH_IV,BACKEND_URL,HF_SPACE_ECPAY_MOCK_URL,HF_SPACE_E_COMMERCE_URL
 from django.core.paginator import Paginator
 import re,os
 from django.db.models import Q
