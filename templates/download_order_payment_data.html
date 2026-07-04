@@ -243,7 +243,7 @@
                         console.log("merchantTradeNo =", merchantTradeNo);
                         
                         const response = await fetch(
-                            "http://127.0.0.1:8001/gateway/download_orderPayment_json/",
+                            "{{HF_SPACE_ECPAY_MOCK_URL}}/gateway/download_orderPayment_json/",
                             {
                                 method: "POST",
                                 headers: {
@@ -286,7 +286,7 @@
                         console.log("merchantTradeNo =", merchantTradeNo);
                         
                         const response = await fetch(
-                            "http://127.0.0.1:8001/gateway/download_orderPayment_json/",
+                            "{{HF_SPACE_ECPAY_MOCK_URL}}/gateway/download_orderPayment_json/",
                             {
                                 method: "POST",
                                 headers: {
