@@ -461,9 +461,6 @@ def purchased_products(request):
 
     user = request.user
     
-#    HF_SPACE_E_COMMERCE_URL = os.environ.get('HF_SPACE_E_COMMERCE_URL', '')
-#    HF_SPACE_ECPAY_MOCK_URL = os.environ.get('HF_SPACE_ECPAY_MOCK_URL', '')
-    
     # 取得該使用者所有訂單，依照建立時間排序（最新的在前）
     orders = Order.objects.filter(user=user).order_by('-created_at')
     
@@ -530,17 +527,15 @@ def purchased_products(request):
             'transaction_id': str(uuid.uuid4()),  # 自動產生唯一交易編號
             'status': order.status,
             # 🔑 綠界官方定義
-            'ReturnURL': "http://127.0.0.1:8000/commerce_shop/ecpay_mock_notify/",   # server-to-server callback, # 綠界回傳 URL
-            'PaymentInfoUrl': "http://127.0.0.1:8000/commerce_shop/payment_info/",   # 綠界通知商城已取得虛擬帳號
-            'OrderResultURL': "http://127.0.0.1:8000/commerce_shop/payment_ok/",  # browser redirect ,瀏覽器跳轉 URL
+            'ReturnURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/ecpay_mock_notify/",   # server-to-server callback, # 綠界回傳 URL
+            'PaymentInfoUrl': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_info/",   # 綠界通知商城已取得虛擬帳號
+            'OrderResultURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_ok/",  # browser redirect ,瀏覽器跳轉 URL
             'action_url': f"{HF_SPACE_ECPAY_MOCK_URL}/gateway/ecpay_gateway_checkout/",
 #             "BankCode": bank_code,
 #             "vAccount": atm_account,
 #             "ExpireDate": expire_date,
         }
         payment_payload["check_mac_value"] = generate_check_mac_value(payment_payload,ECPAY_HASH_KEY,ECPAY_HASH_IV)
-
-        print("HF_SPACE_ECPAY_MOCK_URL= ", HF_SPACE_ECPAY_MOCK_URL)
         
         payment_payload = json.dumps(payment_payload, ensure_ascii=False)
         
@@ -1002,10 +997,10 @@ def payment_ok(request):
             'transaction_id': str(uuid.uuid4()),  # 自動產生唯一交易編號
             'status': order.status,
             # 🔑 綠界官方定義
-            'ReturnURL': "http://127.0.0.1:8000/commerce_shop/ecpay_mock_notify/",   # server-to-server callback, # 綠界回傳 URL
-            'PaymentInfoUrl': "http://127.0.0.1:8000/commerce_shop/payment_info/",   # 綠界通知商城已取得虛擬帳號
-            'OrderResultURL': "http://127.0.0.1:8000/commerce_shop/payment_ok/",  # browser redirect ,瀏覽器跳轉 URL
-            'action_url': "http://127.0.0.1:8001/gateway/ecpay_gateway_checkout/",
+            'ReturnURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/ecpay_mock_notify/",   # server-to-server callback, # 綠界回傳 URL
+            'PaymentInfoUrl': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_info/",   # 綠界通知商城已取得虛擬帳號
+            'OrderResultURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_ok/",  # browser redirect ,瀏覽器跳轉 URL
+            'action_url': f"{HF_SPACE_ECPAY_MOCK_URL}/gateway/ecpay_gateway_checkout/",
 #             "BankCode": bank_code,
 #             "vAccount": atm_account,
 #             "ExpireDate": expire_date,
