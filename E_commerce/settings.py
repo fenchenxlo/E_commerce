@@ -56,12 +56,12 @@ if "HF_SPACE_E_COMMERCE_URL" in os.environ:
 else:
     HF_SPACE_E_COMMERCE_URL = "http://127.0.0.1:8000"
     
-if "HF_SPACE_ECPAY_MOCK_URL" == os.eviron:
+if "HF_SPACE_ECPAY_MOCK_URL" == os.environ:
     HF_SPACE_ECPAY_MOCK_URL = os.environ.get('HF_SPACE_ECPAY_MOCK_URL', '')
 else:
     HF_SPACE_ECPAY_MOCK_URL = "http://127.0.0.1:8001"
     
-if "HF_SPACE_BANK_SITE_URL" == os.eviron:
+if "HF_SPACE_BANK_SITE_URL" == os.environ:
     HF_SPACE_BANK_SITE_URL = os.environ.get('HF_SPACE_BANK_SITE_URL', '')
 else:
     HF_SPACE_BANK_SITE_URL = "http://127.0.0.1:8002"
