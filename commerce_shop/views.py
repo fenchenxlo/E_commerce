@@ -461,8 +461,8 @@ def purchased_products(request):
 
     user = request.user
     
-    HF_SPACE_E_COMMERCE_URL = os.environ.get('HF_SPACE_E_COMMERCE_URL', '')
-    HF_SPACE_ECPAY_MOCK_URL = os.environ.get('HF_SPACE_ECPAY_MOCK_URL', '')
+#    HF_SPACE_E_COMMERCE_URL = os.environ.get('HF_SPACE_E_COMMERCE_URL', '')
+#    HF_SPACE_ECPAY_MOCK_URL = os.environ.get('HF_SPACE_ECPAY_MOCK_URL', '')
     
     # 取得該使用者所有訂單，依照建立時間排序（最新的在前）
     orders = Order.objects.filter(user=user).order_by('-created_at')
@@ -540,6 +540,8 @@ def purchased_products(request):
         }
         payment_payload["check_mac_value"] = generate_check_mac_value(payment_payload,ECPAY_HASH_KEY,ECPAY_HASH_IV)
 
+        print("HF_SPACE_ECPAY_MOCK_URL= ", HF_SPACE_ECPAY_MOCK_URL)
+        
         payment_payload = json.dumps(payment_payload, ensure_ascii=False)
         
         # 將訂單和其商品列表加入 order_list
