@@ -1,5 +1,5 @@
 ---
-title: My Shop Ecpay Mock App
+title: E_commerce
 emoji: ⚡
 colorFrom: pink
 colorTo: gray
