@@ -12,6 +12,14 @@ ENV PYTHONUNBUFFERED=1
 # -m 代表順便建立該使用者的家目錄 (/home/user)
 RUN useradd -m -u 1000 user
 
+# 安裝 gosu:這是解決「非 root 使用者無法寫入掛載路徑 /data」問題的關鍵工具
+# 原理:容器先以 root 身份啟動 → root 有權限處理 /data 的擁有權 →
+#      再用 gosu 把身份「降級」切換成 user,才真正執行 Django 程式
+# (比用 su 更乾淨,不會有殘留的 tty/session 問題)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gosu && \
+    rm -rf /var/lib/apt/lists/*
+	
 # 設定 HOME 環境變數，指向剛剛建立的使用者家目錄
 ENV HOME=/home/user
 
