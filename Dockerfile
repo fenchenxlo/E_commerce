@@ -55,4 +55,14 @@ EXPOSE ${PORT}
 #    --workers 4：開 4 個工作行程處理請求
 #    --timeout 120：單一請求超過 120 秒未回應則視為逾時
 #    --access-logfile -：將 access log 導向標準輸出，方便在平台的 Logs 頁面即時查看
-CMD ["sh", "-c", "python manage.py migrate && python -m gunicorn --bind 0.0.0.0:${PORT} --workers 4 --timeout 120 --access-logfile - E_commerce.wsgi:application"]
+CMD ["sh", "-c", "\
+    mkdir -p /data && \
+    if [ ! -f /data/db.sqlite3 ]; then \
+        echo '首次啟動,複製初始資料庫到 /data...' && \
+        cp $HOME/app/db.sqlite3 /data/db.sqlite3; \
+    else \
+        echo '/data 已有資料庫,沿用現有資料'; \
+    fi && \
+    python manage.py migrate && \
+    python -m gunicorn --bind 0.0.0.0:${PORT} --workers 1 --timeout 120 --access-logfile - E_commerce.wsgi:application \
+"]
