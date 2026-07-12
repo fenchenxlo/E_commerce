@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>資料庫查詢工具</title>
+    <style>
+        body { font-family: sans-serif; margin: 40px; }
+        table { border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #ccc; padding: 6px 12px; }
+        .error { color: red; }
+        select, input, button { padding: 6px; margin: 5px 0; }
+    </style>
+</head>
+<body>
+    <h1>SQLite 查詢工具（管理員限定）</h1>
+
+    <form method="get">
+        <label>選擇 Table：</label>
+        <select name="table" onchange="this.form.submit()">
+            <option value="">-- 請選擇 --</option>
+            {% for t in tables %}
+                <option value="{{ t }}" {% if t == table_choice %}selected{% endif %}>{{ t }}</option>
+            {% endfor %}
+        </select>
+
+        {% if columns %}
+            <br>
+            <label>選擇欄位：</label>
+            <select name="column">
+                <option value="">-- 請選擇 --</option>
+                {% for c in columns %}
+                    <option value="{{ c }}" {% if c == column_choice %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+            </select>
+
+            <br>
+            <label>查詢值（精確比對）：</label>
+            <input type="text" name="value" value="{{ value_input }}">
+
+            <br>
+            <button type="submit">查詢</button>
+        {% endif %}
+    </form>
+
+    {% if error %}
+        <p class="error">查詢錯誤：{{ error }}</p>
+    {% endif %}
+
+    {% if rows %}
+        <p>查詢到 {{ rows|length }} 筆結果</p>
+        <table>
+            <tr>
+                {% for key in rows.0.keys %}
+                    <th>{{ key }}</th>
+                {% endfor %}
+            </tr>
+            {% for row in rows %}
+                <tr>
+                    {% for value in row.values %}
+                        <td>{{ value }}</td>
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+        </table>
+    {% elif table_choice and column_choice and value_input %}
+        <p>沒有符合的資料</p>
+    {% endif %}
+</body>
+</html>

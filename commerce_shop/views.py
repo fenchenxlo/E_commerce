@@ -20,6 +20,10 @@ from django.core.paginator import Paginator
 import re,os
 from django.db.models import Q
 
+from django.contrib.auth.decorators import user_passes_test
+from django.db import connection
+
+
 def home(request):
     # 使用 Product.objects（ActiveProductManager在modols複寫了預設的get_queryset），只會回傳 is_deleted=False 的商品
 #     products = Product.objects.all()
@@ -202,6 +206,67 @@ def api_search(request):
 		'results': results,
 		'has_more': current_page.has_next()
 	})
+
+
+def is_admin(user):
+    """判斷是否為已登入的管理員(superuser)"""
+    return user.is_authenticated and user.is_superuser
+
+
+@user_passes_test(is_admin, login_url='/admin/login/')
+def db_query_tool(request):
+    """
+    資料庫查詢工具:選兩個欄位,查詢同一列對應的值。
+    """
+    tables = []
+    columns = []
+    rows = []
+    error = None
+
+    table_choice = request.GET.get('table', '')
+    column1_choice = request.GET.get('column1', '')
+    column2_choice = request.GET.get('column2', '')
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name NOT LIKE 'sqlite_%' "
+            "AND name NOT LIKE 'django_%' "
+            "AND name NOT LIKE 'auth_%';"
+        )
+        tables = [r[0] for r in cursor.fetchall()]
+
+        if table_choice and table_choice in tables:
+            cursor.execute(f"PRAGMA table_info({table_choice});")
+            columns = [r[1] for r in cursor.fetchall()]
+
+            if (column1_choice and column2_choice
+                    and column1_choice in columns
+                    and column2_choice in columns
+                    and column1_choice != column2_choice):
+                try:
+                    query = (
+                        f"SELECT {column1_choice}, {column2_choice} "
+                        f"FROM {table_choice} "
+                        f"WHERE {column1_choice} IS NOT NULL "
+                        f"AND {column2_choice} IS NOT NULL "
+                        f"ORDER BY rowid;"
+                    )
+                    cursor.execute(query)
+                    rows = [(r[0], r[1]) for r in cursor.fetchall()]
+                except Exception as e:
+                    error = str(e)
+
+    context = {
+        'tables': tables,
+        'columns': columns,
+        'rows': rows,
+        'error': error,
+        'table_choice': table_choice,
+        'column1_choice': column1_choice,
+        'column2_choice': column2_choice,
+    }
+    return render(request, 'db_query.html', context)
 
 
 ## payment_callback
