@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Iphone 17 手機小舖 首頁</title>
+
+    <!-- <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+          rel="stylesheet"> -->
+    <style> 
+        .product-image{
+            height:300px;
+            overflow:hidden;
+            display:flex;
+            justify-content:center;
+            align-items:center;
+        }
+
+        .iphone-img{
+            max-height:100%;
+            transform:scale(1.8);
+        }
+    </style>
+</head>
+<body>
+    {% if user.is_authenticated %}
+        <!-- 如果使用者已登入，顯示使用者名稱 -->
+        <h1>{{ user.username }}，歡迎來到 Iphone 17 手機小舖</h1>
+    {% else %}
+        <!-- 如果使用者未登入，顯示一般歡迎文字 -->
+        <h1>歡迎來到 Iphone 17 手機小舖</h1>
+    {% endif %}
+
+    <!-- 導覽列：使用 flexbox 排成一列 -->
+    <nav style="display: flex; gap: 15px; align-items: center;">
+        {% if user.is_authenticated %}
+            <!-- 已登入的使用者顯示「登出」 -->
+            <a href="{% url 'account_logout' %}">登出</a>
+        {% else %}
+            <!-- 未登入的訪客顯示「登入」與「註冊」 -->
+            <a href="{% url 'account_login' %}">登入</a>
+            <a href="{% url 'account_signup' %}">註冊</a>
+        {% endif %}
+        <!-- 後台管理連結（只有管理員能登入） -->
+        <a href="/admin/">後台管理</a>
+        <!-- 商品列表連結 -->
+        <a href="{% url 'purchased_products' %}">我的商品列表</a>
+        <a href="{% url 'cart_detail' %}">我的購物車</a>
+        <!-- 商家資料下載連結 -->
+        <a href="{% url 'download_orderPayment_json' %}">下載商家資料</a>
+    </nav>
+	
+	<!-- 訊息框架顯示區塊 -->
+	{% if messages %}
+		<ul style="list-style: none; padding: 0;">
+			{% for message in messages %}
+				<li 
+					{% if message.tags == "success" %}
+						style="color: green;"
+					{% elif message.tags == "error" %}
+						style="color: red;"
+					{% elif message.tags == "warning" %}
+						style="color: orange;"
+					{% else %}
+						style="color: black;"
+					{% endif %}
+				>
+					{{ message }}
+				</li>
+			{% endfor %}
+		</ul>
+	{% endif %}
+	
+<h2>商品清單</h2>
+
+{% load static %}
+
+<link rel="stylesheet"
+      href="{% static 'css/bootstrap.min.css' %}">
+
+<script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
+
+<div class="container-fluid">
+    <div class="card h-100">
+        <!-- 搜尋欄 -->
+        <div class="card-body">
+            <form id="searchForm" class="d-flex">                       
+                <input type="text" id="searchInput" class="form-control me-2" placeholder="搜尋 iphone 17 型號,容量,顏色...">
+                <button type="submit" class="btn-warning">搜尋</button>
+            </form>
+        </div>
+     </div>   
+    <!-- 產品展示區 -->
+    <div id="container-product">
+        <div id="productList" class="row">
+            <!-- 商品卡片會動態載入 -->
+        </div>
+        <div id="loading" class="tect-center my-3" style="display:none;">
+            <span class="spinner-border"></span>載入中...
+        </div>
+    </div>
+    <script>
+		const IS_AUTHENTICATED = {{ user.is_authenticated|yesno:"true,false" }};
+	</script>
+    <script>
+        let page = 1; //當前頁數,初始值為1
+        let query= '' //搜尋關鍵字,初始為空字串
+        let loading = false; //是否正在載入中,用來避免重複呼叫API
+        let hasMore = true; //是否還有更多商品載入,初始值為true
+        
+        //初始載入全部商品 (DOM 完成載入後執行)
+        document.addEventListener('DOMContentLoaded', ()=>{
+            console.log("DOMContentLoaded loading product");
+            loadProducts(); //頁面一開始就呼叫 API,顯示全部商品
+        });
+        
+        //綁定搜尋表單提交事件                    
+        document.getElementById('searchForm').addEventListener('submit', function(e){
+            e.preventDefault(); //防止表單的預設跳轉行為
+            query = document.getElementById('searchInput').value.trim(); //取得搜尋輸入框的值
+            page = 1; //重設頁數為1
+            hasMore = true; //重設還有更多商品載入,為true
+            document.getElementById('productList').innerHTML = ''; //清空舊商品列表
+            loadProducts();                        
+        });
+        
+        //載入商品function
+        function loadProducts(){
+            if (loading || !hasMore) return; //如果正在載入或沒有更多商品,就不要呼叫 API
+            console.log("loading product");
+            
+            loading = true; //設定為正在載入中
+            document.getElementById('loading').style.display = 'block'; //顯示 載入中 提示
+            
+            //呼叫後端 API
+            fetch(`/commerce_shop/api_search/?q=${encodeURIComponent(query)}&page=${page}`)
+                .then(response => response.json()) //將回應轉成json
+                .then(data => {
+                    const productList = document.getElementById('productList');
+                    //將每個商品結果動態載入到商品區
+                    data.results.forEach(product => {
+						// 1. 先根據庫存狀況，用 JS 決定按鈕的 HTML
+						let actionButton = '';
+						
+						//const pid = product.product_id;
+						//console.log(pid ,typeof pid);
+						// 判斷登入狀態
+						if (IS_AUTHENTICATED) { 
+							if (Number(product.stock) > 0) {
+								actionButton = `<a href="/commerce_shop/products/add/${product.product_id}" class="btn btn-primary">加入購物車</a>`;
+							} else {
+								actionButton = `<button type="button" class="btn btn-secondary w-100" disabled>庫存不足</button>`;
+							}
+						}
+						
+						// 2. 將按鈕變數動態嵌入到樣板字串中
+                        productList.innerHTML += `
+                            <div class="col-md-4 col-lg-3 mb-4">
+                                <div class="card h-100">
+                                    <div class="product-image">
+                                        <img src="${product.image_url}" class="iphone-img" alt="${product.name}">
+                                    </div>
+                                    <div class="card-body">
+                                        <h5 class="card-title">${product.name}</h5>
+                                        <p class="card-text">${product.price}</p>
+                                        <p class="card-text"> 庫存：${product.stock}</p>
+                                        ${actionButton}                                            
+                                    </div>
+                                </div>
+                            </div>
+                            `;
+                    });
+                    console.log("fetch ok");
+                    hasMore = data.has_more; //更新是否還有更多商品
+                    if(hasMore) page++; //如果有更多商品,頁數加1
+                    loading = false; //設定為 不在載入中
+                    document.getElementById('loading').style.display = 'none'; //隱藏 載入中 提示
+                });
+        }
+        
+        //監聽滾動事件 (Infinite Scroll)
+        window.addEventListener('scroll', () => {
+            //當使用者滾動到接近頁面底部 (距離 200px 以內),就載入下一頁商品
+            if((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 200){
+                loadProducts();
+            }
+        });
+    </script>
+    
+    <div class="card-footer bg-white">
+    </div>
+</div>
+
+
+</body>
+</html>
+
