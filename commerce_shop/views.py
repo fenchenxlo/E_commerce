@@ -15,13 +15,16 @@ import urllib.parse
 from util.ChkMacVal import generate_check_mac_value
 from util.product_image_config import get_product_image
 
-from E_commerce.settings import ECPAY_HASH_KEY,ECPAY_HASH_IV,BACKEND_URL,HF_SPACE_ECPAY_MOCK_URL,HF_SPACE_E_COMMERCE_URL
+from E_commerce.settings import ECPAY_HASH_KEY,ECPAY_HASH_IV
 from django.core.paginator import Paginator
-import re,os
+import re
 from django.db.models import Q
 
-from django.contrib.auth.decorators import user_passes_test
-from django.db import connection
+HF_SPACE_E_COMMERCE_URL = settings.HF_SPACE_E_COMMERCE_URL
+HF_SPACE_ECPAY_MOCK_URL = settings.HF_SPACE_ECPAY_MOCK_URL
+ECPAY_HASH_KEY = settings.ECPAY_HASH_KEY
+ECPAY_HASH_IV = settings.ECPAY_HASH_IV
+BACKEND_URL = settings.BACKEND_URL
 
 
 def home(request):
@@ -208,88 +211,6 @@ def api_search(request):
 	})
 
 
-def is_admin(user):
-    """判斷是否為已登入的管理員(superuser)"""
-    return user.is_authenticated and user.is_superuser
-
-
-@user_passes_test(is_admin, login_url='/admin/login/')
-def db_query_tool(request):
-    """
-    資料庫查詢工具:
-    流程 —— 使用者先選擇 table,選定後列出該 table 所有欄位,
-    再選擇「兩個」欄位(column1、column2),查詢這兩個欄位
-    「同一列(同一筆資料)」對應的值,例如 order_number 對應 status。
-
-    重點:兩個欄位必須放在同一個 SELECT 裡一起查,才能保證
-    回傳的每一筆 (col1值, col2值) 確實來自同一列資料,
-    而不是像分開查兩次那樣,兩份清單各自篩選、順序對不上。
-    """
-    tables = []          # 所有可查詢的 table 名稱
-    columns = []          # 目前選定 table 的欄位名稱清單
-    rows = []              # 查詢結果,每筆是 (col1值, col2值) 的 tuple
-    error = None           # 查詢過程中若有錯誤,存放錯誤訊息
-
-    table_choice = request.GET.get('table', '')      # 使用者選擇的 table 名稱
-    column1_choice = request.GET.get('column1', '')  # 使用者選擇的第一個欄位
-    column2_choice = request.GET.get('column2', '')  # 使用者選擇的第二個欄位
-
-    with connection.cursor() as cursor:
-        # 1. 取得資料庫中所有「業務用」table
-        #    排除 sqlite 系統表、django 內建表、auth 相關表,避免查到不該看的系統資料
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' "
-            "AND name NOT LIKE 'sqlite_%' "
-            "AND name NOT LIKE 'django_%' "
-            "AND name NOT LIKE 'auth_%';"
-        )
-        tables = [r[0] for r in cursor.fetchall()]
-
-        # 2. 若使用者有選擇 table,且該 table 確實存在於允許清單中
-        #    (白名單檢查,防止使用者從網址列竄改 table 參數)
-        if table_choice and table_choice in tables:
-            # 2-1. 取得該 table 的所有欄位名稱(給使用者選擇用)
-            cursor.execute(f"PRAGMA table_info({table_choice});")
-            columns = [r[1] for r in cursor.fetchall()]
-
-            # 3. 兩個欄位都要有選,且都存在於這個 table 的欄位清單中(白名單檢查),
-            #    且不能選成同一個欄位(對應兩個一樣的東西沒有意義)
-            if (column1_choice and column2_choice
-                    and column1_choice in columns
-                    and column2_choice in columns
-                    and column1_choice != column2_choice):
-                try:
-                    # 3-1. 關鍵修改:col1、col2 放在同一個 SELECT 裡一起撈,
-                    #      確保同一列回傳的兩個值是「同一筆資料」的對應值。
-                    #      table_choice / column1_choice / column2_choice
-                    #      都已經過白名單檢查,用 f-string 組 SQL 是安全的。
-                    #      加上 ORDER BY rowid,確保每次查詢順序固定一致。
-                    query = (
-                        f"SELECT {column1_choice}, {column2_choice} "
-                        f"FROM {table_choice} "
-                        f"WHERE {column1_choice} IS NOT NULL "
-                        f"AND {column2_choice} IS NOT NULL "
-                        f"ORDER BY rowid;"
-                    )
-                    cursor.execute(query)
-                    # 直接存成 tuple list:[(col1值, col2值), (col1值, col2值), ...]
-                    rows = [(r[0], r[1]) for r in cursor.fetchall()]
-                except Exception as e:
-                    # 查詢過程中若發生錯誤(例如欄位型別問題),記錄錯誤訊息
-                    error = str(e)
-
-    context = {
-        'tables': tables,
-        'columns': columns,
-        'rows': rows,
-        'error': error,
-        'table_choice': table_choice,
-        'column1_choice': column1_choice,
-        'column2_choice': column2_choice,
-    }
-    return render(request, 'admin_tools/db_query.html', context)
-
-
 ## payment_callback
 ##商城接收付款通知
 @csrf_exempt
@@ -386,7 +307,7 @@ def payment_error(request):
 @login_required
 def download_orderPayment_json(request):
     
-    return render(request, 'download_order_payment_data.html',{'backend_url': BACKEND_URL,'HF_SPACE_ECPAY_MOCK_URL': HF_SPACE_ECPAY_MOCK_URL})
+    return render(request, 'download_order_payment_data.html')
 
 @login_required
 def product_list(request):
@@ -468,7 +389,6 @@ def cart_detail(request):
         {
             'cart_items': cart_items,
             'total_price': total_price,
-            'backend_url': BACKEND_URL,
         }
     )
 
@@ -543,97 +463,119 @@ def purchased_products(request):
     """
     顯示使用者已購買的商品清單。
     每個訂單包含訂單資訊與其商品列表，每個商品加上小計 subtotal。
+    每個 pending 訂單同時準備「ATM」與「COD(超商取貨付款)」兩份已簽章 payload,
+    前端依使用者選擇的付款方式挑一份送出,避免前端臨時改欄位導致簽章對不上。
     """
-
-    user = request.user
-    
-    # 取得該使用者所有訂單，依照建立時間排序（最新的在前）
-    orders = Order.objects.filter(user=user).order_by('-created_at')
-    
-    user_id = user.id
-    print("user_id: ",user_id)
+    try:
+        user = request.user
+        # 取得該使用者所有訂單，依照建立時間排序（最新的在前）
+        orders = Order.objects.filter(user=user).order_by('-created_at')
+        user_id = user.id
+    except Exception as e:
+        print(f"❌ [purchased_products.load_orders] {type(e).__name__}: {e}")
+        # 讀取訂單失敗時,寧可顯示空清單也不要整頁 500,讓使用者至少看得到頁面
+        return render(request, 'purchased_products.html', {'order_list': [], 'load_error': str(e)})
 
     # 建立一個 list，把每個訂單和其商品（含小計）打包
     order_list = []
-    
-    # 模擬產生 ATM 虛擬帳號與繳費期限
-#     bank_code = "013"  # 國泰世華銀行代碼
-#     atm_account = f"{bank_code}{random.randint(100000000000, 999999999999)}"
-#     expire_date = (datetime.datetime.now() + datetime.timedelta(days=3)).strftime("%Y/%m/%d %H:%M:%S")
-    
+
     for order in orders:
         # 取得該訂單的所有 OrderItem
         # 使用 select_related('product') 避免 N+1 查詢問題
-        items = order.items.select_related('product')
-        print("order-pay:",order.status)
-        # 先取得該訂單的所有 OrderItem
-#         order_items = order.items.select_related('product')
+        try:
+            # 【修正】原本這段計算商品明細/運費/merchant_id 的邏輯遺失了,
+            # 導致下面 base_payload 用到的 merchant_id、total_with_shipping、
+            # item_names 等變數會是 NameError,這裡補回來
+            items = order.items.select_related('product')
+            item_names = "#".join([item.product.name for item in items])
 
-        # 把每個商品名稱串起來 (綠界格式通常是 "商品A#商品B#商品C")
-        item_names = "#".join([item.product.name for item in items])
+            items_with_subtotal = []
+            order_total = 0
 
-        # 建立一個 list 來存每個商品和它的小計
-        items_with_subtotal = []
-        order_total = 0  # 先建立訂單小計（未加運費）,移到迴圈外,避免每次重設
+            for item in items:
+                subtotal = item.price * item.quantity
+                items_with_subtotal.append({'item': item, 'subtotal': subtotal})
+                order_total += subtotal
 
-        for item in items:
-            # 計算每個商品小計：單價 × 數量
-            subtotal = item.price * item.quantity            
+            shipping_fee = 60
+            total_with_shipping = order_total + shipping_fee
+            merchant_id = "shop1234"
 
-            # 將 OrderItem 物件和小計一起包成字典
-            items_with_subtotal.append({
-                'item': item,
-                'subtotal': subtotal
+            # 兩種付款方式共用的欄位
+            base_payload = {
+                'merchant_id': merchant_id,
+                'merchant_trade_no': order.order_number,
+                'merchant_trade_date': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'user_id': user_id,
+                'trade_amt': int(total_with_shipping),
+                'trade_desc': order.remark or "購買商品",
+                'item_name': item_names,
+                'payment_type': "aio",
+                'transaction_id': str(uuid.uuid4()),
+                'status': order.status,
+                # Order model 本身就有 receiver_name(必填欄位),直接用即可,
+                # 不用再去猜 user 身上的欄位
+                'receiver_name': order.receiver_name,
+            }
+
+            # ---------- ATM 版 payload ----------
+            atm_payload = dict(base_payload)
+            atm_payload.update({
+                'choose_payment': "ATM",
+                'ReturnURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/ecpay_mock_notify/",
+                'PaymentInfoUrl': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_info/",
+                'OrderResultURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_ok/",
+                'action_url': f"{HF_SPACE_ECPAY_MOCK_URL}/gateway/ecpay_gateway_checkout/",
             })
-            
-            # 累加訂單商品總額
-            order_total += subtotal
+            atm_payload["check_mac_value"] = generate_check_mac_value(
+                atm_payload, ECPAY_HASH_KEY, ECPAY_HASH_IV
+            )
 
-        # 固定運費
-        shipping_fee = 60
+            # ---------- COD 版 payload ----------
+            # 取貨付款要通知的是「這筆訂單收件人」的手機,而不是帳號本身的手機
+            # (兩者可能不同人,例如幫朋友代購),所以優先用 Order.receiver_phone。
+            # 只有在 receiver_phone 意外是空值時,才 fallback 去 UserProfile 撈帳號手機備用。
+            try:
+                receiver_cell_phone = order.receiver_phone or ""
+                if not receiver_cell_phone:
+                    receiver_cell_phone = user.userprofile.phone or ""
+            except Exception as e:
+                # UserProfile 可能不存在(OneToOneField 尚未建立),不影響主流程,
+                # 只記錄一下方便追蹤,COD 欄位留空即可繼續往下走
+                print(f"⚠️ [purchased_products.build_payload] 取得 userprofile.phone 失敗: "
+                      f"{type(e).__name__}: {e}")
+                receiver_cell_phone = ""
 
-        # 訂單總額（商品小計 + 運費）
-        total_with_shipping = order_total + shipping_fee
-        
-        merchant_id = "shop1234"
-        
-        # 🔑 打包必要欄位 dict
-        payment_payload = {
-            'merchant_id': merchant_id,
-            'merchant_trade_no': order.order_number,
-#             'merchant_trade_date': timezone.localtime().strftime("%Y-%m-%d %H:%M:%S"),  # 自動產生交易時間
-            'merchant_trade_date': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), # 自動產生交易時間
-            # 'merchant_trade_date': created_at,  # Order交易時間 
-            'user_id': user_id,
-            'trade_amt': int(total_with_shipping),
-            'trade_desc': order.remark or "購買商品",
-            'item_name': item_names,
-            'choose_payment': "ATM",
-            'payment_type': "aio",
-            'transaction_id': str(uuid.uuid4()),  # 自動產生唯一交易編號
-            'status': order.status,
-            # 🔑 綠界官方定義
-            'ReturnURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/ecpay_mock_notify/",   # server-to-server callback, # 綠界回傳 URL
-            'PaymentInfoUrl': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_info/",   # 綠界通知商城已取得虛擬帳號
-            'OrderResultURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_ok/",  # browser redirect ,瀏覽器跳轉 URL
-            'action_url': f"{HF_SPACE_ECPAY_MOCK_URL}/gateway/ecpay_gateway_checkout/",
-#             "BankCode": bank_code,
-#             "vAccount": atm_account,
-#             "ExpireDate": expire_date,
-        }
-        payment_payload["check_mac_value"] = generate_check_mac_value(payment_payload,ECPAY_HASH_KEY,ECPAY_HASH_IV)
-        
-        payment_payload = json.dumps(payment_payload, ensure_ascii=False)
-        
-        # 將訂單和其商品列表加入 order_list
-        order_list.append({
-            'order': order,
-            'items': items_with_subtotal,
-            'shipping_fee': shipping_fee,           # 運費
-            'total_with_shipping': total_with_shipping,  # 含運費總額
-            'payment_payload': payment_payload,   # ✅ 新增這個 dict
-			'backend_url': BACKEND_URL,
-        })
+            cod_payload = dict(base_payload)
+            cod_payload.update({
+                'choose_payment': "CVSCOD",
+                'receiver_cell_phone': receiver_cell_phone,
+                'ReturnURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/ecpay_mock_notify/",
+                'OrderResultURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_ok/",
+                'action_url': f"{HF_SPACE_ECPAY_MOCK_URL}/cod_gateway/cod_checkout/",
+            })
+            cod_payload["check_mac_value"] = generate_check_mac_value(
+                cod_payload, ECPAY_HASH_KEY, ECPAY_HASH_IV
+            )
+
+            order_list.append({
+                'order': order,
+                'items': items_with_subtotal,
+                'shipping_fee': shipping_fee,
+                'total_with_shipping': total_with_shipping,
+                'payment_payload_atm': json.dumps(atm_payload, ensure_ascii=False),
+                'payment_payload_cod': json.dumps(cod_payload, ensure_ascii=False),
+                'backend_url': BACKEND_URL,
+            })
+        except KeyError as e:
+            # 某個訂單缺少必要欄位(例如 amount 是 None),記錄後跳過這筆,
+            # 不要讓一筆壞資料拖垮整頁清單
+            print(f"❌ [purchased_products.build_payload] 訂單 {order.order_number} 缺少欄位: {e}")
+            continue
+        except Exception as e:
+            print(f"❌ [purchased_products.build_payload] 訂單 {order.order_number} 發生錯誤: "
+                  f"{type(e).__name__}: {e}")
+            continue
 
     # 將整理好的訂單列表傳給模板
     return render(request, 'purchased_products.html', {'order_list': order_list})
@@ -650,7 +592,7 @@ def ready_form(request):
 
     payment_payload = json.loads(request.body)
 
-#     gateway_url = f"http://127.0.0.1:8001/gateway/ecpay_gateway_checkout/"
+#     gateway_url = "http://127.0.0.1:8001/gateway/ecpay_gateway_checkout/"
 
     html = f"""
     <!DOCTYPE html>
@@ -1083,10 +1025,10 @@ def payment_ok(request):
             'transaction_id': str(uuid.uuid4()),  # 自動產生唯一交易編號
             'status': order.status,
             # 🔑 綠界官方定義
-            'ReturnURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/ecpay_mock_notify/",   # server-to-server callback, # 綠界回傳 URL
-            'PaymentInfoUrl': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_info/",   # 綠界通知商城已取得虛擬帳號
-            'OrderResultURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_ok/",  # browser redirect ,瀏覽器跳轉 URL
-            'action_url': f"{HF_SPACE_ECPAY_MOCK_URL}/gateway/ecpay_gateway_checkout/",
+            'ReturnURL': "http://127.0.0.1:8000/commerce_shop/ecpay_mock_notify/",   # server-to-server callback, # 綠界回傳 URL
+            'PaymentInfoUrl': "http://127.0.0.1:8000/commerce_shop/payment_info/",   # 綠界通知商城已取得虛擬帳號
+            'OrderResultURL': "http://127.0.0.1:8000/commerce_shop/payment_ok/",  # browser redirect ,瀏覽器跳轉 URL
+            'action_url': "http://127.0.0.1:8001/gateway/ecpay_gateway_checkout/",
 #             "BankCode": bank_code,
 #             "vAccount": atm_account,
 #             "ExpireDate": expire_date,
@@ -1102,7 +1044,6 @@ def payment_ok(request):
             'shipping_fee': shipping_fee,           # 運費
             'total_with_shipping': total_with_shipping,  # 含運費總額
             'payment_payload': payment_payload,   # ✅ 新增這個 dict
-			'backend_url': BACKEND_URL,
         })
     
     # 把訂單資料丟給 purchased_products.html
