@@ -106,16 +106,34 @@
                 {% if order_dict.order.status == 'pending' %}                    
                     <p>運費：{{ order_dict.shipping_fee }} 元</p>
                     <p>訂單總額（含運費）：{{ order_dict.total_with_shipping|floatformat:2 }} 元</p>
+					
+					<div style="margin-bottom:10px;">
+						<label>
+							<input type="radio" name="pay_method_{{ forloop.counter }}" value="ATM" checked>
+							ATM 轉帳
+						</label>
+						<label style="margin-left:16px;">
+							<input type="radio" name="pay_method_{{ forloop.counter }}" value="COD">
+							超商取貨付款
+						</label>
+					</div>
 
                     <!-- 修改處: 將 id 改為 class 並用 data-payload 儲存訂單付款資料 -->
-                    <button class="pay-btn{{forloop.counter}}" data-payload='{{ order_dict.payment_payload|safe }}'>
-                        前往付款
-                    </button>
+                    <button class="pay-btn{{ forloop.counter }}"
+							data-payload-atm='{{ order_dict.payment_payload_atm|safe }}'
+							data-payload-cod='{{ order_dict.payment_payload_cod|safe }}'>
+						前往付款
+					</button>
 
                     {% csrf_token %}
                     <script>
 						function getCSRFToken() {
-							return document.querySelector('[name=csrfmiddlewaretoken]').value
+							const el = document.querySelector('[name=csrfmiddlewaretoken]');
+							if (!el) {
+								console.error("❌ 找不到 CSRF token,請確認 {% csrf_token %} 有正確渲染");
+								return "";
+							}
+							return el.value;
 						}
 
                         // 修改處: 使用 class 選擇器綁定多個按鈕事件
@@ -123,7 +141,28 @@
                             const buttons = document.querySelectorAll(".pay-btn{{forloop.counter}}");  // 選取所有付款按鈕
                             buttons.forEach(btn => {
                                 btn.addEventListener("click", function(){
-                                    const payload = JSON.parse(this.dataset.payload);  // 讀取對應的 payload
+									let payload;
+									try {
+										const checkedInput = document.querySelector(
+											`input[name="pay_method_{{ forloop.counter }}"]:checked`
+										);
+										if (!checkedInput) {
+											throw new Error("尚未選擇付款方式");
+										}
+										const payMethod = checkedInput.value;
+
+										// 直接挑選對應「已簽好章」的那份 payload,前端不再修改任何欄位
+										const rawPayload = payMethod === "COD"
+											? this.dataset.payloadCod
+											: this.dataset.payloadAtm;
+
+										payload = JSON.parse(rawPayload);
+									} catch (err) {
+										console.error("❌ [前往付款] payload 準備失敗:", err);
+										alert("付款資料準備失敗，請重新整理頁面後再試一次");
+										return;
+									}
+                                    //let payload = JSON.parse(this.dataset.payload);  // 讀取對應的 payload
                                     //fetch("http://127.0.0.1:8000/commerce_shop/ready_form/", {
 									fetch("/commerce_shop/ready_form/", {
                                         method: "POST",
@@ -134,13 +173,21 @@
                                         },
                                         body: JSON.stringify(payload)
                                     })
-                                    .then(res => res.text())
+                                    .then(res => {
+										if (!res.ok) {
+											throw new Error(`ready_form 回傳錯誤狀態碼: ${res.status}`);
+										}
+										return res.text();
+									})
                                     .then(html => {
                                         document.open();
                                         document.write(html);
                                         document.close();
                                     })
-                                    .catch(err => console.error(err));
+                                    .catch(err => {
+										console.error("❌ [前往付款] fetch 失敗:", err);
+										alert("導向付款頁面失敗，請稍後再試");
+									});
                                 });
                             });
 						});
