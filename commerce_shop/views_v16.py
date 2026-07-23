@@ -19,6 +19,7 @@ from E_commerce.settings import ECPAY_HASH_KEY,ECPAY_HASH_IV
 from django.core.paginator import Paginator
 import re
 from django.db.models import Q
+from django.contrib.auth.decorators import user_passes_test
 
 def home(request):
     # 使用 Product.objects（ActiveProductManager在modols複寫了預設的get_queryset），只會回傳 is_deleted=False 的商品
