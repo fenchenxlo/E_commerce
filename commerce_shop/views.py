@@ -19,6 +19,7 @@ from E_commerce.settings import ECPAY_HASH_KEY,ECPAY_HASH_IV
 from django.core.paginator import Paginator
 import re
 from django.db.models import Q
+from django.contrib.auth.decorators import user_passes_test
 
 HF_SPACE_E_COMMERCE_URL = settings.HF_SPACE_E_COMMERCE_URL
 HF_SPACE_ECPAY_MOCK_URL = settings.HF_SPACE_ECPAY_MOCK_URL
