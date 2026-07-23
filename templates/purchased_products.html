@@ -130,7 +130,7 @@
 						function getCSRFToken() {
 							const el = document.querySelector('[name=csrfmiddlewaretoken]');
 							if (!el) {
-								console.error("❌ 找不到 CSRF token,請確認 {% csrf_token %} 有正確渲染");
+								console.error("❌ 找不到 CSRF token,請確認 CSRF token 有正確渲染");
 								return "";
 							}
 							return el.value;
