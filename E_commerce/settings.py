@@ -78,7 +78,7 @@ INSTALLED_APPS = [
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
-    "corsheaders",      # 新增 CORS 支援
+    'corsheaders',      # 新增 CORS 支援
 ]
 
 SITE_ID = 1
@@ -136,7 +136,13 @@ SECURE_CSP = {
     "default-src": [CSP.SELF],
     "style-src": [CSP.SELF, CSP.UNSAFE_INLINE],   # 允許 inline style   
     "script-src": [CSP.SELF, CSP.UNSAFE_INLINE],  # 允許 inline script
-    "img-src": [CSP.SELF, "https:"],
+#    "img-src": [CSP.SELF, "https:"],
+    "img-src": [
+        CSP.SELF,
+        "https:",
+        "data:",
+        "blob:",
+    ],
     "frame-ancestors": ["https://huggingface.co"],  # 允許 HF 嵌入
 }
 
