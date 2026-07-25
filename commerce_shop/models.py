@@ -224,6 +224,28 @@ class Order(models.Model):
         auto_now_add=True  # 在建立訂單時自動填入當下時間，只在第一次建立時設定
     )  # 訂單建立時間
     
+	# ===== 【新增】超商取貨付款(CVSCOD)確認後,由 ecpay_mock callback 回填的欄位 =====
+    # 全部給 blank=True, default="",對既有資料完全不影響,不用補資料就能直接 migrate
+    PAYMENT_METHOD_CHOICES = [
+        ("ATM", "ATM 轉帳"),
+        ("COD", "超商取貨付款"),
+    ]
+    payment_method = models.CharField(
+        max_length=10,
+        choices=PAYMENT_METHOD_CHOICES,
+        blank=True,
+        default="",
+        help_text="使用者實際確認的付款方式(未確認前為空字串,用來判斷要不要繼續顯示付款選擇按鈕)"
+    )
+    cvs_store_name = models.CharField(
+        max_length=100, blank=True, default="",
+        help_text="超商取貨付款:使用者確認的取貨門市名稱"
+    )
+    cvs_store_address = models.CharField(
+        max_length=200, blank=True, default="",
+        help_text="超商取貨付款:使用者確認的取貨門市地址"
+    )
+	
 #     def save(self, *args, **kwargs):
 
         # 自動產生訂單編號
