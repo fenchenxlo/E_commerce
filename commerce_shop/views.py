@@ -749,8 +749,7 @@ def purchased_products(request):
 			continue
 		except Exception as e:
 #			 print(f"❌ [purchased_products.build_payload] 訂單 {order.order_number} 發生錯誤: "
-			logger.exception(f"❌ [purchased_products.build_payload] 訂單 {order.order_number} 發生錯誤")  # 【修改】
-				  f"{type(e).__name__}: {e}")
+			logger.exception(f"❌ [purchased_products.build_payload] 訂單 {order.order_number} 發生錯誤  {type(e).__name__}: {e}")  # 【修改】
 			continue
 
 	# 將整理好的訂單列表傳給模板
