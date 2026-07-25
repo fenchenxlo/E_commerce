@@ -717,7 +717,7 @@ def purchased_products(request):
 				# UserProfile 可能不存在(OneToOneField 尚未建立),不影響主流程,
 				# 只記錄一下方便追蹤,COD 欄位留空即可繼續往下走
 #				 print(f"⚠️ [purchased_products.build_payload] 取得 userprofile.phone 失敗: " f"{type(e).__name__}: {e}")
-				logger.exception(f"⚠️ [purchased_products.build_payload] 取得 userprofile.phone 失敗: " f"{type(e).__name__}: {e})	# 【修改】
+				logger.exception(f"⚠️ [purchased_products.build_payload] 取得 userprofile.phone 失敗: " f"{type(e).__name__}: {e}")	# 【修改】
 				receiver_cell_phone = ""
 
 			cod_payload = dict(base_payload)
