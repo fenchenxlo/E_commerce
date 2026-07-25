@@ -198,6 +198,45 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,  # 重要:不要關掉 Django 內建的 logger(例如 django.request 記 500 錯誤用的)
+
+    "formatters": {
+        "verbose": {
+            # 【說明】把 logger 名稱、等級、時間、訊息都印出來,方便在 HF Logs 分頁快速定位是哪個 view 出的錯
+            "format": "[{levelname}] {asctime} {name} - {message}",
+            "style": "{",
+        },
+    },
+
+    "handlers": {
+        "console": {
+            # 【重點】HF Space 是跑在 Docker 容器裡,Logs 分頁抓的就是容器的 stdout/stderr,
+            # 所以這裡一定要用 StreamHandler 輸出到 console,而不是寫檔案
+            # (寫檔案的話,容器重啟或重新部署後檔案就消失了,而且 Logs 分頁也看不到)
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+    },
+
+    "root": {
+        # root logger:沒有特別指定的 logger(包含你 cod_gateway/views.py 裡的
+        # logger = logging.getLogger(__name__))預設都會往這裡送
+        "handlers": ["console"],
+        "level": "INFO",   # INFO 以上都會印出來(INFO、WARNING、ERROR、CRITICAL)
+    },
+
+    "loggers": {
+        "django": {
+            # Django 自己的 log(例如 500 錯誤、SQL 查詢警告等),
+            # 明確指定一次,避免跟 root 設定衝突或被意外覆蓋
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/

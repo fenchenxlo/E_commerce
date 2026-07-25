@@ -23,6 +23,7 @@ from commerce_shop.views import (
     add_to_cart,
     cart_detail,
     checkout,
+	cod_store_confirmed,  # 新增 import
     purchased_products,
     update_cart_item,
     remove_cart_item,
@@ -52,6 +53,7 @@ urlpatterns = [
     path('products/add/<int:product_id>/', add_to_cart, name='add_to_cart'),
     path('cart/', cart_detail, name='cart_detail'), # 購物車頁面
     path('checkout/', checkout, name='checkout'), # 結帳
+	path('cod_store_confirmed/', cod_store_confirmed, name='cod_store_confirmed'),
     path('purchased_products/', purchased_products, name='purchased_products'),# user_order
     path('delete_order/<int:order_id>/', delete_order, name='delete_order'), # 刪除user_order
     path('delete_order_item/<int:order_item_id>/', delete_order_item, name='delete_order_item'), # 刪除user order_item

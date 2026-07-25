@@ -107,91 +107,108 @@
                     <p>運費：{{ order_dict.shipping_fee }} 元</p>
                     <p>訂單總額（含運費）：{{ order_dict.total_with_shipping|floatformat:2 }} 元</p>
 					
-					<div style="margin-bottom:10px;">
-						<label>
-							<input type="radio" name="pay_method_{{ forloop.counter }}" value="ATM" checked>
-							ATM 轉帳
-						</label>
-						<label style="margin-left:16px;">
-							<input type="radio" name="pay_method_{{ forloop.counter }}" value="COD">
-							超商取貨付款
-						</label>
-					</div>
+					{% if order_dict.order.payment_method %}
+						<!-- 【新增】已經確認過付款方式,不再顯示 ATM/COD 選擇按鈕,
+							 改成顯示目前確認的付款資訊,避免使用者重複選、搞混狀態 -->
+						<div style="border:1px solid #ccc; padding:12px; border-radius:8px; background:#f8f8f8;">
+							{% if order_dict.order.payment_method == 'COD' %}
+								<p>付款方式：<b>超商取貨付款(貨到付現)</b></p>
+								<p>取貨門市：{{ order_dict.order.cvs_store_name }}</p>
+								<p>門市地址：{{ order_dict.order.cvs_store_address }}</p>
+								<p style="color:#888;">目前狀態：待出貨,貨到超商時付現</p>
+							{% else %}
+								<p>付款方式：<b>ATM 轉帳</b></p>
+								<p style="color:#888;">目前狀態：待付款</p>
+							{% endif %}
+						</div>
+					{% else %}
+						<!-- 尚未確認付款方式,顯示原本的 ATM/COD 選擇 UI(內容跟原本一樣,沒有變動) -->
+						<div style="margin-bottom:10px;">
+							<label>
+								<input type="radio" name="pay_method_{{ forloop.counter }}" value="ATM" checked>
+								ATM 轉帳
+							</label>
+							<label style="margin-left:16px;">
+								<input type="radio" name="pay_method_{{ forloop.counter }}" value="COD">
+								超商取貨付款
+							</label>
+						</div>
 
-                    <!-- 修改處: 將 id 改為 class 並用 data-payload 儲存訂單付款資料 -->
-                    <button class="pay-btn{{ forloop.counter }}"
-							data-payload-atm='{{ order_dict.payment_payload_atm|safe }}'
-							data-payload-cod='{{ order_dict.payment_payload_cod|safe }}'>
-						前往付款
-					</button>
+						<!-- 修改處: 將 id 改為 class 並用 data-payload 儲存訂單付款資料 -->
+						<button class="pay-btn{{ forloop.counter }}"
+								data-payload-atm='{{ order_dict.payment_payload_atm|safe }}'
+								data-payload-cod='{{ order_dict.payment_payload_cod|safe }}'>
+							前往付款
+						</button>
 
-                    {% csrf_token %}
-                    <script>
-						function getCSRFToken() {
-							const el = document.querySelector('[name=csrfmiddlewaretoken]');
-							if (!el) {
-								console.error("❌ 找不到 CSRF token,請確認 CSRF token 有正確渲染");
-								return "";
+						{% csrf_token %}
+						<script>
+							function getCSRFToken() {
+								const el = document.querySelector('[name=csrfmiddlewaretoken]');
+								if (!el) {
+									console.error("❌ 找不到 CSRF token,請確認 CSRF token 有正確渲染");
+									return "";
+								}
+								return el.value;
 							}
-							return el.value;
-						}
 
-                        // 修改處: 使用 class 選擇器綁定多個按鈕事件
-						document.addEventListener("DOMContentLoaded", function(){
-                            const buttons = document.querySelectorAll(".pay-btn{{forloop.counter}}");  // 選取所有付款按鈕
-                            buttons.forEach(btn => {
-                                btn.addEventListener("click", function(){
-									let payload;
-									try {
-										const checkedInput = document.querySelector(
-											`input[name="pay_method_{{ forloop.counter }}"]:checked`
-										);
-										if (!checkedInput) {
-											throw new Error("尚未選擇付款方式");
+							// 修改處: 使用 class 選擇器綁定多個按鈕事件
+							document.addEventListener("DOMContentLoaded", function(){
+								const buttons = document.querySelectorAll(".pay-btn{{forloop.counter}}");  // 選取所有付款按鈕
+								buttons.forEach(btn => {
+									btn.addEventListener("click", function(){
+										let payload;
+										try {
+											const checkedInput = document.querySelector(
+												`input[name="pay_method_{{ forloop.counter }}"]:checked`
+											);
+											if (!checkedInput) {
+												throw new Error("尚未選擇付款方式");
+											}
+											const payMethod = checkedInput.value;
+
+											// 直接挑選對應「已簽好章」的那份 payload,前端不再修改任何欄位
+											const rawPayload = payMethod === "COD"
+												? this.dataset.payloadCod
+												: this.dataset.payloadAtm;
+
+											payload = JSON.parse(rawPayload);
+										} catch (err) {
+											console.error("❌ [前往付款] payload 準備失敗:", err);
+											alert("付款資料準備失敗，請重新整理頁面後再試一次");
+											return;
 										}
-										const payMethod = checkedInput.value;
-
-										// 直接挑選對應「已簽好章」的那份 payload,前端不再修改任何欄位
-										const rawPayload = payMethod === "COD"
-											? this.dataset.payloadCod
-											: this.dataset.payloadAtm;
-
-										payload = JSON.parse(rawPayload);
-									} catch (err) {
-										console.error("❌ [前往付款] payload 準備失敗:", err);
-										alert("付款資料準備失敗，請重新整理頁面後再試一次");
-										return;
-									}
-                                    //let payload = JSON.parse(this.dataset.payload);  // 讀取對應的 payload
-                                    //fetch("http://127.0.0.1:8000/commerce_shop/ready_form/", {
-									fetch("/commerce_shop/ready_form/", {
-                                        method: "POST",
-                                        credentials: "include",
-                                        headers: {
-                                            "X-CSRFToken": getCSRFToken(),
-                                            "Content-Type": "application/json",
-                                        },
-                                        body: JSON.stringify(payload)
-                                    })
-                                    .then(res => {
-										if (!res.ok) {
-											throw new Error(`ready_form 回傳錯誤狀態碼: ${res.status}`);
-										}
-										return res.text();
-									})
-                                    .then(html => {
-                                        document.open();
-                                        document.write(html);
-                                        document.close();
-                                    })
-                                    .catch(err => {
-										console.error("❌ [前往付款] fetch 失敗:", err);
-										alert("導向付款頁面失敗，請稍後再試");
+										//let payload = JSON.parse(this.dataset.payload);  // 讀取對應的 payload
+										//fetch("http://127.0.0.1:8000/commerce_shop/ready_form/", {
+										fetch("/commerce_shop/ready_form/", {
+											method: "POST",
+											credentials: "include",
+											headers: {
+												"X-CSRFToken": getCSRFToken(),
+												"Content-Type": "application/json",
+											},
+											body: JSON.stringify(payload)
+										})
+										.then(res => {
+											if (!res.ok) {
+												throw new Error(`ready_form 回傳錯誤狀態碼: ${res.status}`);
+											}
+											return res.text();
+										})
+										.then(html => {
+											document.open();
+											document.write(html);
+											document.close();
+										})
+										.catch(err => {
+											console.error("❌ [前往付款] fetch 失敗:", err);
+											alert("導向付款頁面失敗，請稍後再試");
+										});
 									});
-                                });
-                            });
-						});
-					</script>
+								});
+							});
+						</script>
+					{% endif %}
                     
                 {% elif order_dict.order.status == 'paid' %}
                     <span style="color: green;">
