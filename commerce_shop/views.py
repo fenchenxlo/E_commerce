@@ -6,7 +6,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required  # 匯入裝飾器，限制某些 view 必須登入才能使用
 from .models import Product, Cart, CartItem, Order, OrderItem, Payment	# 匯入本 app 的模型：商品、購物車、購物車項目
 from django.contrib import messages	 # 匯入 Django 的訊息框架，用來顯示提示訊息
-from django.db import transaction
+from django.db import connection, transaction
 from django.urls import reverse
 
 import uuid, datetime, hashlib, time, json, traceback
@@ -415,7 +415,7 @@ def enter_receiver_info(request, order_number):
 
     # ── GET:單純顯示表單 ──────────────────────────────
     if request.method == "GET":
-        return render(request, "enter_receiver_info.html", {"order": order})
+        return render(request, "enter_receiver_info.html", {"order_number": order_number})
 
     if request.method != "POST":
         return HttpResponse("method error", status=405)
