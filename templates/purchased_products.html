@@ -126,7 +126,7 @@
 							 改成單純一個連結,導到 enter_receiver_info 中間頁去填收件資訊+選付款方式。
 							 這裡不用再準備 payment_payload_atm / payment_payload_cod,
 							 也不用任何 JS,單純的 Django 表單流程,降低出錯機會。 -->
-						<a href="{% url 'enter_receiver_info' order_dict.order.id %}"
+						<a href="{% url 'enter_receiver_info' order_dict.order.order_number %}"
 						   style="display:inline-block; text-decoration:none; padding:10px 20px;
 								  background:#2b7de9; color:#fff; border-radius:6px;">
 							前往填寫收件資訊並付款
