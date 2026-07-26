@@ -122,17 +122,15 @@
 							{% endif %}
 						</div>
 					{% else %}
-						<!-- 尚未確認付款方式,顯示原本的 ATM/COD 選擇 UI(內容跟原本一樣,沒有變動) -->
-						<div style="margin-bottom:10px;">
-							<label>
-								<input type="radio" name="pay_method_{{ forloop.counter }}" value="ATM" checked>
-								ATM 轉帳
-							</label>
-							<label style="margin-left:16px;">
-								<input type="radio" name="pay_method_{{ forloop.counter }}" value="COD">
-								超商取貨付款
-							</label>
-						</div>
+						<!-- 【修改】原本這裡是 radio 選項 + 前往付款按鈕 + fetch script,
+							 改成單純一個連結,導到 enter_receiver_info 中間頁去填收件資訊+選付款方式。
+							 這裡不用再準備 payment_payload_atm / payment_payload_cod,
+							 也不用任何 JS,單純的 Django 表單流程,降低出錯機會。 -->
+						<a href="{% url 'enter_receiver_info' order_dict.order.id %}"
+						   style="display:inline-block; text-decoration:none; padding:10px 20px;
+								  background:#2b7de9; color:#fff; border-radius:6px;">
+							前往填寫收件資訊並付款
+						</a>
 
 						<!-- 修改處: 將 id 改為 class 並用 data-payload 儲存訂單付款資料 -->
 						<button class="pay-btn{{ forloop.counter }}"

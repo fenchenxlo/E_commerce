@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>填寫收件資訊</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .container { max-width: 500px; margin: auto; }
+        label { display: block; margin-bottom: 12px; }
+        input[type="text"], input[type="tel"] {
+            width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box;
+        }
+        .error { color: red; margin-bottom: 12px; }
+        .btn {
+            margin-top: 16px; padding: 10px 24px; font-size: 16px;
+            cursor: pointer; background: #2b7de9; color: #fff; border: none; border-radius: 6px;
+        }
+        .pay-method { margin: 16px 0; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>填寫收件資訊</h1>
+    <p>訂單編號：{{ order.order_number }}</p>
+
+    {% if error %}
+        <p class="error">{{ error }}</p>
+    {% endif %}
+
+    <!-- 表單送出後由 enter_receiver_info view 的 POST 分支處理,
+         驗證失敗時會帶著 posted_name/posted_phone/posted_address + error 重新 render 這一頁,
+         避免使用者重新輸入已經填過的內容 -->
+    <form method="post">
+        {% csrf_token %}
+        <label>
+            收件人姓名
+            <input type="text" name="receiver_name"
+                   value="{{ posted_name|default:order.receiver_name }}"
+                   required maxlength="100">
+        </label>
+        <label>
+            收件人手機
+            <input type="tel" name="receiver_phone"
+                   value="{{ posted_phone|default:order.receiver_phone }}"
+                   required maxlength="20">
+        </label>
+        <label>
+            收件地址
+            <input type="text" name="receiver_address"
+                   value="{{ posted_address|default:order.receiver_address }}"
+                   required maxlength="200">
+        </label>
+
+        <div class="pay-method">
+            <label style="display:inline;">
+                <input type="radio" name="pay_method" value="ATM" checked> ATM 轉帳
+            </label>
+            <label style="display:inline; margin-left:16px;">
+                <input type="radio" name="pay_method" value="COD"> 超商取貨付款
+            </label>
+        </div>
+
+        <button type="submit" class="btn">確認並前往付款</button>
+    </form>
+</div>
+</body>
+</html>
