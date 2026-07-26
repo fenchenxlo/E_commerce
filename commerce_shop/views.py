@@ -415,7 +415,7 @@ def enter_receiver_info(request, order_number):
 
     # ── GET:單純顯示表單 ──────────────────────────────
     if request.method == "GET":
-        return render(request, "enter_receiver_info.html", {"order_number": order_number})
+        return render(request, "enter_receiver_info.html", {"order": order})
 
     if request.method != "POST":
         return HttpResponse("method error", status=405)
