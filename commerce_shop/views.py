@@ -383,6 +383,166 @@ def cod_store_confirmed(request):
 
 	return JsonResponse({"status": "success"})
 
+@login_required
+def enter_receiver_info(request, order_number):
+    """
+    【新增】「前往付款」的中間頁:填寫/確認收件人姓名、手機、地址,並選擇付款方式(ATM/COD)。
+
+    GET:  顯示表單,預填 Order 目前既有的收件資訊
+    POST: 1. 驗證欄位
+          2. 把收件資訊存回 Order
+          3. 用「剛存進去的最新資料」組出對應付款方式的 payload 並簽章
+          4. 直接 render 一個會自動送出的 HTML form,POST 到 ecpay_mock 的 action_url
+             (整段「送到綠界」直接在這裡完成,純傳統 Django 表單流程,不用 JS/fetch,
+             降低出錯機會,也比較好除錯)
+
+    容易出錯的地方都各自用 try/except 包住:
+      - 訂單查詢(get_object_or_404 本身若查不到會自動回 404,不用額外包)
+      - 表單欄位驗證(必填檢查)
+      - 資料庫寫入(order.save())
+      - 商品明細/金額計算(items 可能是空的、product 可能被刪除等)
+      - payload 組裝與簽章計算
+    每個例外都用 logger.exception() 記錄完整 traceback,方便在 HF Space Logs 分頁除錯。
+    """
+    # 只能操作自己的訂單,且只有還沒確認付款方式的狀態才能進來這頁,
+    # 避免使用者用網址列亂改 order_number 存取別人的訂單,或修改已經走完流程的訂單
+    order = get_object_or_404(
+        Order,
+        order_number=order_number,
+        user=request.user,
+        status__in=["pending", "failed"],
+    )
+
+    # ── GET:單純顯示表單 ──────────────────────────────
+    if request.method == "GET":
+        return render(request, "enter_receiver_info.html", {"order": order})
+
+    if request.method != "POST":
+        return HttpResponse("method error", status=405)
+
+    # ── Step 1: 取出並驗證表單欄位 ──────────────────────
+    try:
+        receiver_name = request.POST.get("receiver_name", "").strip()
+        receiver_phone = request.POST.get("receiver_phone", "").strip()
+        receiver_address = request.POST.get("receiver_address", "").strip()
+        pay_method = request.POST.get("pay_method", "").strip()
+    except Exception as e:
+        # request.POST 理論上不太會出錯,但保底攔一次,避免整頁 500
+        logger.exception(f"[enter_receiver_info] 訂單 {order.order_number} 讀取表單欄位失敗")
+        return render(request, "enter_receiver_info.html", {
+            "order": order,
+            "error": "表單資料讀取失敗,請重新填寫。",
+        })
+
+    if not receiver_name or not receiver_phone or not receiver_address:
+        return render(request, "enter_receiver_info.html", {
+            "order": order,
+            "error": "收件人姓名、手機、地址皆為必填,請重新填寫。",
+            "posted_name": receiver_name,
+            "posted_phone": receiver_phone,
+            "posted_address": receiver_address,
+        })
+
+    if pay_method not in ("ATM", "COD"):
+        return render(request, "enter_receiver_info.html", {
+            "order": order,
+            "error": "請選擇付款方式。",
+            "posted_name": receiver_name,
+            "posted_phone": receiver_phone,
+            "posted_address": receiver_address,
+        })
+
+    # ── Step 2: 存回 Order ──────────────────────────────
+    try:
+        order.receiver_name = receiver_name
+        order.receiver_phone = receiver_phone
+        order.receiver_address = receiver_address
+        order.save()
+    except Exception:
+        logger.exception(f"[enter_receiver_info.save_order] 訂單 {order.order_number} 更新收件資訊失敗")
+        return render(request, "enter_receiver_info.html", {
+            "order": order,
+            "error": "收件資訊儲存失敗,請稍後再試。",
+            "posted_name": receiver_name,
+            "posted_phone": receiver_phone,
+            "posted_address": receiver_address,
+        })
+
+    # ── Step 3: 計算商品明細與金額 ───────────────────────
+    try:
+        items = order.items.select_related('product')
+        item_names = "#".join([item.product.name for item in items])
+        order_total = sum(item.price * item.quantity for item in items)
+        shipping_fee = 60
+        total_with_shipping = order_total + shipping_fee
+    except Exception:
+        logger.exception(f"[enter_receiver_info.calc_amount] 訂單 {order.order_number} 計算金額失敗")
+        return render(request, "enter_receiver_info.html", {
+            "order": order,
+            "error": "計算訂單金額時發生錯誤,請稍後再試。",
+        })
+
+    # ── Step 4: 組 payload + 簽章 ─────────────────────────
+    try:
+        base_payload = {
+            'merchant_id': "shop1234",
+            'merchant_trade_no': order.order_number,
+            'merchant_trade_date': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'user_id': request.user.id,
+            'trade_amt': int(total_with_shipping),
+            'trade_desc': order.remark or "購買商品",
+            'item_name': item_names,
+            'payment_type': "aio",
+            'transaction_id': str(uuid.uuid4()),
+            'status': order.status,
+            'receiver_name': order.receiver_name,
+            'receiver_address': order.receiver_address,
+        }
+
+        if pay_method == "ATM":
+            payload = dict(base_payload)
+            payload.update({
+                'choose_payment': "ATM",
+                'ReturnURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/ecpay_mock_notify/",
+                'PaymentInfoUrl': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_info/",
+                'OrderResultURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_ok/",
+                'action_url': f"{HF_SPACE_ECPAY_MOCK_URL}/gateway/ecpay_gateway_checkout/",
+            })
+        else:  # COD
+            payload = dict(base_payload)
+            payload.update({
+                'choose_payment': "CVSCOD",
+                'receiver_cell_phone': order.receiver_phone,
+                'ReturnURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/ecpay_mock_notify/",
+                'OrderResultURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_ok/",
+                'action_url': f"{HF_SPACE_ECPAY_MOCK_URL}/cod_gateway/cod_checkout/",
+            })
+
+        payload["check_mac_value"] = generate_check_mac_value(
+            payload, ECPAY_HASH_KEY, ECPAY_HASH_IV
+        )
+    except Exception:
+        logger.exception(f"[enter_receiver_info.build_payload] 訂單 {order.order_number} 組 payload/簽章失敗")
+        return render(request, "enter_receiver_info.html", {
+            "order": order,
+            "error": "付款資料準備失敗,請稍後再試。",
+        })
+
+     # ── Step 5: 組自動送出表單的 HTML(呼叫共用函式,跟 ready_form 用同一份邏輯)──
+    try:
+        html = _build_auto_submit_html(payload)
+    except Exception:
+        logger.exception(f"[enter_receiver_info.build_html] 訂單 {order.order_number} 組自動送出頁失敗")
+        return render(request, "enter_receiver_info.html", {
+            "order": order,
+            "error": "產生付款頁面失敗,請稍後再試。",
+        })
+
+    logger.info(f"[enter_receiver_info] 訂單 {order.order_number} 準備送出,"
+                f"pay_method={pay_method}, action_url={payload['action_url']}")
+    return HttpResponse(html)
+    
+
 ## payment_callback
 ##商城接收付款通知
 @csrf_exempt
@@ -755,57 +915,60 @@ def purchased_products(request):
 	# 將整理好的訂單列表傳給模板
 	return render(request, 'purchased_products.html', {'order_list': order_list})
 
+def _build_auto_submit_html(payload: dict) -> str:
+    """
+    【重構】把「用 payload dict 組出自動送出的 HTML form」這段邏輯,
+    從 ready_form 抽出來獨立成一個函式,讓 ready_form 和 enter_receiver_info
+    都能重用同一份程式碼,不用維護兩份幾乎一樣的字串組裝邏輯。
+    """
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>轉址到綠界中...</title>
+    </head>
+    <body>
+        <h2>正在導向綠界付款...</h2>
+        <form id="ecpayForm"
+              method="post"
+              action="{payload['action_url']}">
+    """
+    for key, value in payload.items():
+        html += f"""
+            <input
+                type="hidden"
+                name="{key}"
+                value="{value}">
+        """
+    html += """
+        </form>
+        <script>
+            document.getElementById(
+                "ecpayForm"
+            ).submit();
+        </script>
+    </body>
+    </html>
+    """
+    return html
+	
 # @require_POST
 @login_required
 def ready_form(request):
-	"""
-	商城：
-	接收 payment_payload
-	組成 HTML Form
-	自動 POST 到模擬綠界
-	"""
+    """
+    商城：接收 payment_payload,組成 HTML Form,自動 POST 到模擬綠界。
+    【修改】組 HTML 的邏輯改成呼叫共用函式 _build_auto_submit_html(),
+    ready_form 本身只負責「從 request.body 解析 JSON」這件事。
+    """
+    try:
+        payment_payload = json.loads(request.body)
+    except json.JSONDecodeError:
+        logger.exception("[ready_form] request.body 不是合法 JSON")
+        return HttpResponseBadRequest("JSON 格式錯誤")
 
-	payment_payload = json.loads(request.body)
-
-#	  gateway_url = "http://127.0.0.1:8001/gateway/ecpay_gateway_checkout/"
-
-	html = f"""
-	<!DOCTYPE html>
-	<html>
-	<head>
-		<meta charset="utf-8">
-		<title>轉址到綠界中...</title>
-	</head>
-	<body>
-		<h2>正在導向綠界付款...</h2>
-		<form id="ecpayForm"
-			  method="post"
-			  action="{payment_payload['action_url']}">
-	"""
-
-	for key, value in payment_payload.items():
-
-		html += f"""
-			<input
-				type="hidden"
-				name="{key}"
-				value="{value}">
-		"""
-
-	html += """
-		</form>
-
-		<script>
-			document.getElementById(
-				"ecpayForm"
-			).submit();
-		</script>
-
-	</body>
-	</html>
-	"""
-
-	return HttpResponse(html)
+    html = _build_auto_submit_html(payment_payload)
+    return HttpResponse(html)
 
 def ready_form1(request):
 	# 🔑 打包必要欄位 dict
