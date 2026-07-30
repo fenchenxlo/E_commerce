@@ -103,7 +103,7 @@
             </table>
             <!-- 訂單操作區 -->
             <div style="margin-bottom: 40px;">
-                {% if order_dict.order.status == 'pending' or order_dict.order.status == 'failed'%}                    
+                {% if order_dict.order.status == 'pending' or order_dict.order.status == 'failed' or order_dict.order.status == 'cod_confirmed'%}                    
                     <p>運費：{{ order_dict.shipping_fee }} 元</p>
                     <p>訂單總額（含運費）：{{ order_dict.total_with_shipping|floatformat:2 }} 元</p>
 					

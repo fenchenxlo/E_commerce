@@ -140,7 +140,8 @@ class Order(models.Model):
     # 訂單狀態可選項目, 前面 是實際存入資料庫的值, 後面是 會在應用程式或是管理介面中顯示
     STATUS_CHOICES = [  
         ('pending', 'Pending'),  # pending：待付款或待處理
-        ('waiting_payment', 'Waiting_Payment'),  # 已取得 ATM 虛擬帳號,待付款
+#        ('waiting_payment', 'Waiting_Payment'),  # 已取得 ATM 虛擬帳號,待付款
+		('cod_confirmed', 'COD_Confirmed'),          # 【新增】COD 專用:已確認取貨門市,待出貨付現
         ('expired', 'Expired'),  # 過期未付款
         ('paid', 'Paid'),  # paid：已付款
         ('failed', 'Failed'),  # 付款失敗

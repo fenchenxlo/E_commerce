@@ -375,6 +375,7 @@ def cod_store_confirmed(request):
 		order.payment_method = "COD"
 		order.cvs_store_name = data.get("store_name", "")
 		order.cvs_store_address = data.get("store_address", "")
+		order.status = "cod_confirmed"  # 【新增】
 		order.save()
 	except Exception as e:
 #		print(f"❌ [cod_store_confirmed.db_write] {type(e).__name__}: {e}")
