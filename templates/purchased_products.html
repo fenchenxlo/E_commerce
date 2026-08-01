@@ -57,7 +57,7 @@
                     {% if order_dict.order.status == 'pending' %}status-pending
                     {% elif order_dict.order.status == 'paid' %}status-paid
                     {% elif order_dict.order.status == 'failed' %}status-failed
-					{% elif order_dict.order.status == 'cod_confirmed' %}
+					{% elif order_dict.order.status == 'cod_confirmed' %}status-pending
                     {% elif order_dict.order.status == 'shipped' %}status-shipped
                     {% elif order_dict.order.status == 'cancelled' %}status-cancelled
                     {% endif %}
