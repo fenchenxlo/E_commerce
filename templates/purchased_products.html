@@ -21,7 +21,7 @@
         .status-paid { color: blue; }
         .status-failed { color: red; }
 		.status-cod_confirmed {color: green}
-		.status-ATM_confirmed {color: green}
+		.status-ATM {color: green}
         .status-shipped { color: green; }
         .status-cancelled { color: red; }
     </style>
@@ -59,7 +59,7 @@
                     {% elif order_dict.order.status == 'paid' %}status-paid
                     {% elif order_dict.order.status == 'failed' %}status-failed
 					{% elif order_dict.order.status == 'cod_confirmed' %}status-cod_confirmed
-					{% elif order_dict.order.status == 'ATM_confirmed' %}status-ATM_confirmed
+					{% elif order_dict.order.status == 'ATM' %}status-ATM
                     {% elif order_dict.order.status == 'shipped' %}status-shipped
                     {% elif order_dict.order.status == 'cancelled' %}status-cancelled
                     {% endif %}
@@ -68,7 +68,7 @@
                     {% elif order_dict.order.status == 'paid' %}已付款
                     {% elif order_dict.order.status == 'failed' %}付款失敗
 					{% elif order_dict.order.status == 'cod_confirmed' %}超商取貨待付款
-					{% elif order_dict.order.status == 'ATM_confirmed' %}ATM待付款
+					{% elif order_dict.order.status == 'ATM' %}ATM待付款
                     {% elif order_dict.order.status == 'shipped' %}已出貨
                     {% elif order_dict.order.status == 'cancelled' %}已取消
                     {% endif %}
@@ -109,7 +109,7 @@
             </table>
             <!-- 訂單操作區 -->
             <div style="margin-bottom: 40px;">
-                {% if order_dict.order.status == 'pending' or order_dict.order.status == 'failed' or order_dict.order.status == 'cod_confirmed' or order_dict.order.status == 'ATM_confirmed'%}                    
+                {% if order_dict.order.status == 'pending' or order_dict.order.status == 'failed' or order_dict.order.status == 'cod_confirmed' or order_dict.order.status == 'ATM'%}                    
                     <p>運費：{{ order_dict.shipping_fee }} 元</p>
                     <p>訂單總額（含運費）：{{ order_dict.total_with_shipping|floatformat:2 }} 元</p>
 					
