@@ -512,7 +512,7 @@ def enter_receiver_info(request, order_number):
         else:  # COD
             payload = dict(base_payload)
             payload.update({
-                'choose_payment': "CVSCOD",
+                'choose_payment': "COD",
                 'receiver_cell_phone': order.receiver_phone,
                 'ReturnURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/ecpay_mock_notify/",
                 'OrderResultURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_ok/",

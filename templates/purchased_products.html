@@ -20,6 +20,7 @@
         .status-pending { color: orange; }
         .status-paid { color: blue; }
         .status-failed { color: red; }
+		.status-cod_confirmed {color: green}
         .status-shipped { color: green; }
         .status-cancelled { color: red; }
     </style>
@@ -56,6 +57,7 @@
                     {% if order_dict.order.status == 'pending' %}status-pending
                     {% elif order_dict.order.status == 'paid' %}status-paid
                     {% elif order_dict.order.status == 'failed' %}status-failed
+					{% elif order_dict.order.status == 'cod_confirmed' %}
                     {% elif order_dict.order.status == 'shipped' %}status-shipped
                     {% elif order_dict.order.status == 'cancelled' %}status-cancelled
                     {% endif %}
@@ -63,6 +65,7 @@
                     {% if order_dict.order.status == 'pending' %}待處理
                     {% elif order_dict.order.status == 'paid' %}已付款
                     {% elif order_dict.order.status == 'failed' %}付款失敗
+					{% elif order_dict.order.status == 'cod_confirmed' %}超商取貨付款成功
                     {% elif order_dict.order.status == 'shipped' %}已出貨
                     {% elif order_dict.order.status == 'cancelled' %}已取消
                     {% endif %}
