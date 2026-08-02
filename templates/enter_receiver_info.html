@@ -59,8 +59,19 @@
                 <input type="radio" name="pay_method" value="COD"> 超商取貨付款
             </label>
         </div>
+        <script>
+			function goBack() {
+				if (history.length >= 2) {
+					history.go(-2);
+				} else {
+					history.go(-1);
+				}
+			}
+			</script>
 
-        <button type="submit" class="btn">確認並前往付款</button><button type="button" onclick="history.go(-2)">返回</button>
+        <button type="submit" class="btn">確認並前往付款</button>
+		<button type="button" onclick="window.top.location.href='{{ HF_SPACE_E_COMMERCE_URL }}/commerce_shop/purchased_products/'">返回商城</button>
+		<button type="button" onclick="goBack()"> 返回 </button>
     </form>
 </div>
 </body>
