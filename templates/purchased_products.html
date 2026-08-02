@@ -112,7 +112,7 @@
                 {% if order_dict.order.status == 'pending' or order_dict.order.status == 'failed' or order_dict.order.status == 'cod_confirmed' or order_dict.order.status == 'ATM'%}                    
                     <p>運費：{{ order_dict.shipping_fee }} 元</p>
                     <p>訂單總額（含運費）：{{ order_dict.total_with_shipping|floatformat:2 }} 元</p>
-					{{order_dict.order.payment_method}}
+					{{order_dict.order.payment_method}},{{order_dict.payment_payload_atm.payment_method}}
 					{% if order_dict.order.payment_method %}
 						<!-- 【新增】已經確認過付款方式,不再顯示 ATM/COD 選擇按鈕,
 							 改成顯示目前確認的付款資訊,避免使用者重複選、搞混狀態 -->
