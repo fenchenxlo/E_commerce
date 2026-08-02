@@ -122,9 +122,7 @@
 								<p>取貨門市：{{ order_dict.order.cvs_store_name }}</p>
 								<p>門市地址：{{ order_dict.order.cvs_store_address }}</p>
 								<p style="color:#888;">目前狀態：待出貨,貨到超商時付現</p>
-							{% elif order_dict.payment_method == 'ATM' %}
-								<p>付款方式：<b>ATM 轉帳</b></p>
-								<p style="color:#888;">目前狀態：待付款</p>
+							
 							{% elif order_dict.payment_method == 'ATM' and order_dict.order.status == 'failed'%}
 								<!-- 【修改】原本這裡是 radio 選項 + 前往付款按鈕 + fetch script,
 									 改成單純一個連結,導到 enter_receiver_info 中間頁去填收件資訊+選付款方式。
@@ -135,6 +133,9 @@
 										  background:#2b7de9; color:#fff; border-radius:6px;">
 									前往填寫收件資訊並付款
 								</a>
+							{% elif order_dict.payment_method == 'ATM' %}
+								<p>付款方式：<b>ATM 轉帳</b></p>
+								<p style="color:#888;">目前狀態：待付款</p>
 							{% endif %}
 						</div>
 					{% else %}
