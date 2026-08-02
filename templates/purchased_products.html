@@ -112,7 +112,7 @@
                 {% if order_dict.order.status == 'pending' or order_dict.order.status == 'failed' or order_dict.order.status == 'cod_confirmed' or order_dict.order.status == 'ATM'%}                    
                     <p>運費：{{ order_dict.shipping_fee }} 元</p>
                     <p>訂單總額（含運費）：{{ order_dict.total_with_shipping|floatformat:2 }} 元</p>
-					
+					{{order_dict.order.payment_method}}
 					{% if order_dict.order.payment_method %}
 						<!-- 【新增】已經確認過付款方式,不再顯示 ATM/COD 選擇按鈕,
 							 改成顯示目前確認的付款資訊,避免使用者重複選、搞混狀態 -->
@@ -122,7 +122,7 @@
 								<p>取貨門市：{{ order_dict.order.cvs_store_name }}</p>
 								<p>門市地址：{{ order_dict.order.cvs_store_address }}</p>
 								<p style="color:#888;">目前狀態：待出貨,貨到超商時付現</p>
-							{% else %}
+							{% elif order_dict.order.payment_method == 'ATM' %}
 								<p>付款方式：<b>ATM 轉帳</b></p>
 								<p style="color:#888;">目前狀態：待付款</p>
 							{% endif %}

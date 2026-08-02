@@ -858,6 +858,7 @@ def purchased_products(request):
 			atm_payload = dict(base_payload)
 			atm_payload.update({
 				'choose_payment': "ATM",
+				'payment_method': "ATM",
 				'ReturnURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/ecpay_mock_notify/",
 				'PaymentInfoUrl': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_info/",
 				'OrderResultURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_ok/",
@@ -884,7 +885,8 @@ def purchased_products(request):
 
 			cod_payload = dict(base_payload)
 			cod_payload.update({
-				'choose_payment': "CVSCOD",
+				'choose_payment': "COD",
+				'payment_method': "COD",
 				'receiver_cell_phone': receiver_cell_phone,
 				'ReturnURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/ecpay_mock_notify/",
 				'OrderResultURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_ok/",
