@@ -459,7 +459,7 @@ def enter_receiver_info(request, order_number):
         order.receiver_phone = receiver_phone
         order.receiver_address = receiver_address
 #        order.status = "pending"
-		order.pay_method = pay_method
+        order.pay_method = pay_method
         order.save()
     except Exception:
         logger.exception(f"[enter_receiver_info.save_order] 訂單 {order.order_number} 更新收件資訊失敗")
@@ -819,6 +819,7 @@ def purchased_products(request):
 	for order in orders:
 		# 取得該訂單的所有 OrderItem
 		# 使用 select_related('product') 避免 N+1 查詢問題
+		payment_method = order.payment_method
 		try:
 			# 【修正】原本這段計算商品明細/運費/merchant_id 的邏輯遺失了,
 			# 導致下面 base_payload 用到的 merchant_id、total_with_shipping、
@@ -854,8 +855,14 @@ def purchased_products(request):
 				# 不用再去猜 user 身上的欄位
 				'receiver_name': order.receiver_name,
 			}
-
+            
+			if payment_method != "COD":
+               method = "ATM"
+            else:
+               method = "COD"
+			
 			# ---------- ATM 版 payload ----------
+			
 			atm_payload = dict(base_payload)
 			atm_payload.update({
 				'choose_payment': "ATM",
@@ -883,7 +890,7 @@ def purchased_products(request):
 #				 print(f"⚠️ [purchased_products.build_payload] 取得 userprofile.phone 失敗: " f"{type(e).__name__}: {e}")
 				logger.exception(f"⚠️ [purchased_products.build_payload] 取得 userprofile.phone 失敗: " f"{type(e).__name__}: {e}")	# 【修改】
 				receiver_cell_phone = ""
-
+            
 			cod_payload = dict(base_payload)
 			cod_payload.update({
 				'choose_payment': "COD",
@@ -902,7 +909,7 @@ def purchased_products(request):
 				'items': items_with_subtotal,
 				'shipping_fee': shipping_fee,
 				'total_with_shipping': total_with_shipping,
-				'payment_method': "ATM" if payment_method != "COD" else "COD",
+				'payment_method': payment_method,
 				'payment_payload_atm': json.dumps(atm_payload, ensure_ascii=False),
 				'payment_payload_cod': json.dumps(cod_payload, ensure_ascii=False),
 				'backend_url': BACKEND_URL,
