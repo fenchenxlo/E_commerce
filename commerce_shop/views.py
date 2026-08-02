@@ -856,10 +856,10 @@ def purchased_products(request):
 				'receiver_name': order.receiver_name,
 			}
             
-            if payment_method != "COD":
-                method = "ATM"
-            else:
-                method = "COD"
+			if payment_method != "COD":
+				method = "ATM"
+			else:
+				method = "COD"
 			
 			# ---------- ATM 版 payload ----------
 			
