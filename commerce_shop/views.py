@@ -458,7 +458,8 @@ def enter_receiver_info(request, order_number):
         order.receiver_name = receiver_name
         order.receiver_phone = receiver_phone
         order.receiver_address = receiver_address
-        order.status = pay_method 
+#        order.status = "pending"
+		order.pay_method = pay_method
         order.save()
     except Exception:
         logger.exception(f"[enter_receiver_info.save_order] 訂單 {order.order_number} 更新收件資訊失敗")
@@ -901,6 +902,7 @@ def purchased_products(request):
 				'items': items_with_subtotal,
 				'shipping_fee': shipping_fee,
 				'total_with_shipping': total_with_shipping,
+				'payment_method': "ATM" if payment_method != "COD" else "COD",
 				'payment_payload_atm': json.dumps(atm_payload, ensure_ascii=False),
 				'payment_payload_cod': json.dumps(cod_payload, ensure_ascii=False),
 				'backend_url': BACKEND_URL,
