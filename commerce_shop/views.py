@@ -857,9 +857,9 @@ def purchased_products(request):
 			}
             
 			if payment_method != "COD":
-				method = "ATM"
+				payment_method = "ATM"
 			else:
-				method = "COD"
+				payment_method = "COD"
 			
 			# ---------- ATM 版 payload ----------
 			
