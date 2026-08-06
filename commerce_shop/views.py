@@ -600,7 +600,7 @@ def cod_payment_confirmed(request):
 
             Payment.objects.get_or_create(
                 order=order,
-                transaction_id=data.get("transaction_id", str(uuid.uuid4()),
+                transaction_id=data.get("transaction_id", str(uuid.uuid4())),
                 defaults={
                     "amount": data.get("trade_amt", order.total_amount),
                     "payment_method": "COD",
