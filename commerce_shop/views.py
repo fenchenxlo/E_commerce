@@ -506,6 +506,7 @@ def enter_receiver_info(request, order_number):
             payload = dict(base_payload)
             payload.update({
                 'choose_payment': "ATM",
+                'payment_method': "ATM",
                 'ReturnURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/ecpay_mock_notify/",
                 'PaymentInfoUrl': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_info/",
                 'OrderResultURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_ok/",
@@ -515,6 +516,7 @@ def enter_receiver_info(request, order_number):
             payload = dict(base_payload)
             payload.update({
                 'choose_payment': "COD",
+                'payment_method': "COD",
                 'receiver_cell_phone': order.receiver_phone,
                 'ReturnURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/ecpay_mock_notify/",
                 'OrderResultURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_ok/",
@@ -544,7 +546,79 @@ def enter_receiver_info(request, order_number):
     logger.info(f"[enter_receiver_info] 訂單 {order.order_number} 準備送出,"
                 f"pay_method={pay_method}, action_url={payload['action_url']}")
     return HttpResponse(html)
-    
+
+@csrf_exempt
+def cod_payment_confirmed(request):
+    """
+    【新增】接收 ecpay_mock(cod_gateway)的通知:COD 訂單已完成取貨付款(demo 模擬)。
+    把 Order.status 改成 paid,並建立一筆 Payment 紀錄。
+
+    容易出錯的地方:
+    - Payment model 的 bank_code/v_account/expire_date 是 ATM 專用欄位,且沒有
+      null=True/blank=True,COD 沒有這些真實資料,這裡給空字串/目前時間當佔位值,
+      只是為了滿足 model 的必填限制,不代表真的有這些資訊
+      (不特地為 COD 改動共用的 Payment model,維持最小改動)
+    - order.status 寫入包進 transaction.atomic(),Order 更新跟 Payment 建立
+      要嘛一起成功、要嘛一起失敗,不會有寫一半的中間狀態
+    """
+    if request.method != "POST":
+        return HttpResponse("method error", status=405)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError as e:
+        logger.exception("[cod_payment_confirmed.parse_body] JSON 格式錯誤")
+        return JsonResponse({"status": "error", "message": "JSON 格式錯誤"}, status=400)
+
+    try:
+        recv_mac = data.pop("check_mac_value", "")
+        local_mac = generate_check_mac_value(data, ECPAY_HASH_KEY, ECPAY_HASH_IV)
+    except Exception as e:
+        logger.exception("[cod_payment_confirmed.generate_mac] 簽章計算失敗")
+        return JsonResponse({"status": "error", "message": str(e)}, status=400)
+
+    if recv_mac != local_mac:
+        logger.warning("[cod_payment_confirmed] CheckMacValue 不符,拒絕這次通知")
+        return JsonResponse({"status": "error", "message": "CheckMacValue Error"}, status=400)
+
+    try:
+        order = Order.objects.get(order_number=data["merchant_trade_no"])
+    except Order.DoesNotExist as e:
+        logger.exception("[cod_payment_confirmed.order_not_found] 找不到對應訂單")
+        return JsonResponse({"status": "error", "message": "找不到對應訂單"}, status=404)
+    except KeyError as e:
+        logger.exception(f"[cod_payment_confirmed.missing_field] 缺少欄位: {e}")
+        return JsonResponse({"status": "error", "message": f"缺少欄位: {e}"}, status=400)
+    except Exception as e:
+        logger.exception("[cod_payment_confirmed.db_read_unexpected] 讀取訂單失敗")
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+    try:
+        with transaction.atomic():
+            order.status = "paid"
+            order.save()
+
+            Payment.objects.get_or_create(
+                order=order,
+                transaction_id=data.get("transaction_id", str(uuid.uuid4()),
+                defaults={
+                    "amount": data.get("trade_amt", order.total_amount),
+                    "payment_method": "COD",
+                    "status": "success",
+                    "paid_at": timezone.now(),
+                    "response_data": data,
+                    "bank_code": "",       # COD 沒有銀行代碼,佔位值
+                    "v_account": "",       # COD 沒有虛擬帳號,佔位值
+                    "expire_date": timezone.now(),  # COD 沒有繳費期限,佔位值
+                },
+            )
+    except Exception as e:
+        logger.exception(
+            f"[cod_payment_confirmed.db_write] 訂單 {data.get('merchant_trade_no')} 寫入失敗"
+        )
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+    return JsonResponse({"status": "success"})    
 
 ## payment_callback
 ##商城接收付款通知
