@@ -411,7 +411,7 @@ def enter_receiver_info(request, order_number):
         Order,
         order_number=order_number,
         user=request.user,
-        status__in=["pending", "failed"],
+        status__in=["pending", "failed", "atm_confirmed", "cod_confirmed"],
     )
 
     # ── GET:單純顯示表單 ──────────────────────────────
