@@ -460,7 +460,7 @@ def enter_receiver_info(request, order_number):
         order.receiver_phone = receiver_phone
         order.receiver_address = receiver_address
         order.status = "atm_confirmed"
-        order.pay_method = pay_method
+        order.payment_method = pay_method
         order.save()
     except Exception:
         logger.exception(f"[enter_receiver_info.save_order] 訂單 {order.order_number} 更新收件資訊失敗")
