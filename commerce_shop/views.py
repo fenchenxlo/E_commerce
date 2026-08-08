@@ -458,7 +458,7 @@ def enter_receiver_info(request, order_number):
         order.receiver_name = receiver_name
         order.receiver_phone = receiver_phone
         order.receiver_address = receiver_address
-#        order.status = "pending"
+        order.status = "atm_confirmed"
         order.pay_method = pay_method
         order.save()
     except Exception:
