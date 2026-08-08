@@ -420,7 +420,7 @@ def enter_receiver_info(request, order_number):
 
     if request.method != "POST":
         return HttpResponse("method error", status=405)
-
+    pay_method = ''
     # ── Step 1: 取出並驗證表單欄位 ──────────────────────
     try:
         receiver_name = request.POST.get("receiver_name", "").strip()
