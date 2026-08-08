@@ -59,7 +59,7 @@
                     {% elif order_dict.order.status == 'paid' %}status-paid
                     {% elif order_dict.order.status == 'failed' %}status-failed
 					{% elif order_dict.order.status == 'cod_confirmed' %}status-cod_confirmed
-					{% elif order_dict.order.status == 'ATM' %}status-ATM
+					{% elif order_dict.order.status == 'atm_confirmed' %}status-atm_confirmed
                     {% elif order_dict.order.status == 'shipped' %}status-shipped
                     {% elif order_dict.order.status == 'cancelled' %}status-cancelled
                     {% endif %}
@@ -68,7 +68,7 @@
                     {% elif order_dict.order.status == 'paid' %}已付款
                     {% elif order_dict.order.status == 'failed' %}付款失敗
 					{% elif order_dict.order.status == 'cod_confirmed' %}超商取貨待付款
-					{% elif order_dict.order.status == 'ATM' %}ATM待付款
+					{% elif order_dict.order.status == 'atm_confirmed' %}ATM待付款
                     {% elif order_dict.order.status == 'shipped' %}已出貨
                     {% elif order_dict.order.status == 'cancelled' %}已取消
                     {% endif %}
@@ -109,7 +109,7 @@
             </table>
             <!-- 訂單操作區 -->
             <div style="margin-bottom: 40px;">
-                {% if order_dict.order.status == 'pending' or order_dict.order.status == 'failed' or order_dict.order.status == 'cod_confirmed' or order_dict.order.status == 'ATM'%}                    
+                {% if order_dict.order.status == 'pending' or order_dict.order.status == 'failed' or order_dict.order.status == 'cod_confirmed' or order_dict.order.status == 'atm_confirmed'%}                    
                     <p>運費：{{ order_dict.shipping_fee }} 元</p>
                     <p>訂單總額（含運費）：{{ order_dict.total_with_shipping|floatformat:2 }} 元</p>
 					
@@ -117,13 +117,28 @@
 						<!-- 【新增】已經確認過付款方式,不再顯示 ATM/COD 選擇按鈕,
 							 改成顯示目前確認的付款資訊,避免使用者重複選、搞混狀態 -->
 						<div style="border:1px solid #ccc; padding:12px; border-radius:8px; background:#f8f8f8;">
-							{% if order_dict.payment_method == 'COD' %}
+							{% if order_dict.payment_method == 'COD'%}
 								<p>付款方式：<b>超商取貨付款(貨到付現)</b></p>
 								<p>取貨門市：{{ order_dict.order.cvs_store_name }}</p>
 								<p>門市地址：{{ order_dict.order.cvs_store_address }}</p>
 								<p style="color:#888;">目前狀態：待出貨,貨到超商時付現</p>
+								
+							{% elif order_dict.payment_method == 'ATM' %}
+								<!-- 【修改】ATM 付款資訊存放於 Payment model，
+									 不在 Order model。
+									 purchased_products view 會取得目前 pending 的 ATM Payment，
+									 並將銀行代碼、虛擬銀行帳戶、繳費期限傳給模板。 -->
+								<p>付款方式：<b>ATM 轉帳</b></p>
+								<p>銀行代碼：<b>{{ order_dict.payment_bank_code }}</b></p>
+								<p>虛擬銀行帳戶：<b>{{ order_dict.payment_v_account }}</b></p>
+								<p>繳費期限：
+									<b>{{ order_dict.payment_expire_date|date:"Y-m-d H:i" }}</b>
+								</p>
+								<p style="color:#888;">目前狀態：待付款</p>
+							{% endif %}
 							
-							{% elif order_dict.payment_method == 'ATM' and order_dict.order.status == 'failed'%}
+							{% comment %}
+							{% elif order_dict.order.status == 'failed' or order_dict.order.status == 'pending'%}
 								<!-- 【修改】原本這裡是 radio 選項 + 前往付款按鈕 + fetch script,
 									 改成單純一個連結,導到 enter_receiver_info 中間頁去填收件資訊+選付款方式。
 									 這裡不用再準備 payment_payload_atm / payment_payload_cod,
@@ -133,10 +148,8 @@
 										  background:#2b7de9; color:#fff; border-radius:6px;">
 									前往填寫收件資訊並付款
 								</a>
-							{% elif order_dict.payment_method == 'ATM' %}
-								<p>付款方式：<b>ATM 轉帳</b></p>
-								<p style="color:#888;">目前狀態：待付款</p>
-							{% endif %}
+							{% endcomment %}
+							
 						</div>
 					{% else %}
 						<!-- 【修改】原本這裡是 radio 選項 + 前往付款按鈕 + fetch script,

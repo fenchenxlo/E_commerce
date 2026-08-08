@@ -892,12 +892,26 @@ def purchased_products(request):
 
 	for order in orders:
 		# 取得該訂單的所有 OrderItem
-		# 使用 select_related('product') 避免 N+1 查詢問題
-		payment_method = order.payment_method
+		payment_method = order.payment_method or ""
+		# 【新增】一個 Order 可以有多筆 Payment。
+		# ATM 的 bank_code / v_account / expire_date 存在 Payment model， 不在 Order model。
+		# 只有當 Order 已確認付款方式為 ATM 時，
+		# 才取得該訂單最新建立的 ATM Payment。
+		atm_payment = None
+
+		if payment_method == 'ATM':
+			atm_payment = (
+				order.payments
+				.filter(payment_method='ATM')
+				.order_by('-created_at')
+				.first()
+			)
+		
 		try:
 			# 【修正】原本這段計算商品明細/運費/merchant_id 的邏輯遺失了,
 			# 導致下面 base_payload 用到的 merchant_id、total_with_shipping、
 			# item_names 等變數會是 NameError,這裡補回來
+			# 使用 select_related('product') 避免 N+1 查詢問題
 			items = order.items.select_related('product')
 			item_names = "#".join([item.product.name for item in items])
 
@@ -929,12 +943,7 @@ def purchased_products(request):
 				# 不用再去猜 user 身上的欄位
 				'receiver_name': order.receiver_name,
 			}
-            
-			if payment_method != "COD":
-				payment_method = "ATM"
-			else:
-				payment_method = "COD"
-			
+            			
 			# ---------- ATM 版 payload ----------
 			
 			atm_payload = dict(base_payload)
@@ -984,6 +993,12 @@ def purchased_products(request):
 				'shipping_fee': shipping_fee,
 				'total_with_shipping': total_with_shipping,
 				'payment_method': payment_method,
+				# 【新增】ATM 付款資訊來自 Payment model。
+				# 因為同一個 Order 可以有多筆 Payment，
+				# 這裡只取該訂單最新的一筆 ATM Payment。
+				'payment_bank_code': atm_payment.bank_code if atm_payment else '',
+				'payment_v_account': atm_payment.v_account if atm_payment else '',
+				'payment_expire_date': atm_payment.expire_date if atm_payment else None,
 				'payment_payload_atm': json.dumps(atm_payload, ensure_ascii=False),
 				'payment_payload_cod': json.dumps(cod_payload, ensure_ascii=False),
 				'backend_url': BACKEND_URL,
