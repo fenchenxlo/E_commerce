@@ -427,7 +427,7 @@ def enter_receiver_info(request, order_number):
         receiver_phone = request.POST.get("receiver_phone", "").strip()
         receiver_address = request.POST.get("receiver_address", "").strip()
         pay_method = request.POST.get("pay_method", "").strip()
-		logger.info("pay_method: ", pay_method)
+        logger.info("pay_method: ", pay_method)
     except Exception as e:
         # request.POST 理論上不太會出錯,但保底攔一次,避免整頁 500
         logger.exception(f"[enter_receiver_info] 訂單 {order.order_number} 讀取表單欄位失敗")
