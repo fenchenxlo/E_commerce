@@ -319,6 +319,80 @@ def db_query_tool(request):
 	return render(request, 'admin_tools/db_query.html', context)
 
 @csrf_exempt
+def atm_payment_notify(request):
+
+    if request.method != "POST":
+        return JsonResponse({
+            "status": False,
+            "message": "Method Not Allowed"
+        }, status=405)
+
+    try:
+        data = json.loads(request.body.decode("utf-8"))
+    except json.JSONDecodeError:
+        return JsonResponse({
+            "status": False,
+            "message": "JSON 格式錯誤"
+        }, status=400)
+
+    received_mac = data.pop("CheckMacValue", "")
+
+    expected_mac = generate_check_mac_value(
+        data,
+        settings.ECPAY_HASH_KEY,
+        settings.ECPAY_HASH_IV
+    )
+
+    if received_mac != expected_mac:
+        return JsonResponse({
+            "status": False,
+            "message": "CheckMacValue Error"
+        }, status=400)
+
+    merchant_trade_no = data["merchant_trade_no"]
+
+    try:
+        order = Order.objects.get(
+            order_number=merchant_trade_no
+        )
+    except Order.DoesNotExist:
+        return JsonResponse({
+            "status": False,
+            "message": "找不到訂單"
+        }, status=404)
+
+    expire_date = datetime.strptime(
+        data["expire_date"],
+        "%Y-%m-%d %H:%M:%S"
+    )
+
+    expire_date = timezone.make_aware(expire_date)
+
+    payment, created = Payment.objects.update_or_create(
+        order=order,
+        payment_method="ATM",
+        defaults={
+            "bank_code": data["bank_code"],
+            "v_account": data["v_account"],
+            "expire_date": expire_date,
+            "status": data.get(
+                "status",
+                "atm_created"
+            ),
+        }
+    )
+
+    return JsonResponse({
+        "status": True,
+        "merchant_trade_no": order.order_number,
+        "bank_code": payment.bank_code,
+        "v_account": payment.v_account,
+        "expire_date": payment.expire_date.strftime(
+            "%Y-%m-%d %H:%M:%S"
+        ),
+    })
+
+@csrf_exempt
 def cod_store_confirmed(request):
 	"""
 	【新增】接收 ecpay_mock(cod_gateway)的 server-to-server 通知:
