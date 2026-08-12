@@ -375,10 +375,8 @@ def atm_payment_notify(request):
             "bank_code": data["bank_code"],
             "v_account": data["v_account"],
             "expire_date": expire_date,
-            "status": data.get(
-                "status",
-                "atm_created"
-            ),
+            "status": data.get("status","atm_created"),
+            "amount": data["trade_amt"]
         }
     )
 
