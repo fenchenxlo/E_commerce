@@ -361,7 +361,7 @@ def atm_payment_notify(request):
             "message": "找不到訂單"
         }, status=404)
 
-    expire_date = datetime.strptime(
+    expire_date = datetime.datetime.strptime(
         data["expire_date"],
         "%Y-%m-%d %H:%M:%S"
     )
