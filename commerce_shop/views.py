@@ -376,7 +376,8 @@ def atm_payment_notify(request):
             "v_account": data["v_account"],
             "expire_date": expire_date,
             "status": data.get("status","atm_created"),
-            "amount": data["trade_amt"]
+            "amount": data["trade_amt"],
+            'transaction_id': str(uuid.uuid4()),			
         }
     )
 
