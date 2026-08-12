@@ -372,12 +372,13 @@ def atm_payment_notify(request):
         order=order,
         payment_method="ATM",
         defaults={
-            "bank_code": data["bank_code"],
-            "v_account": data["v_account"],
-            "expire_date": expire_date,
-            "status": data.get("status","atm_created"),
-            "amount": data["trade_amt"],
-            'transaction_id': str(uuid.uuid4()),			
+            'bank_code': data["bank_code"],
+            'v_account': data["v_account"],
+            'expire_date': expire_date,
+            'status': data.get("status","atm_created"),
+            'amount': data["trade_amt"],
+            'transaction_id': str(uuid.uuid4()),
+            'response_data': data,
         }
     )
 
@@ -532,15 +533,15 @@ def enter_receiver_info(request, order_number):
         order.receiver_name = receiver_name
         order.receiver_phone = receiver_phone
         order.receiver_address = receiver_address
-        order.save()
+
         # 依付款方式設定訂單狀態 
         if pay_method == "ATM": 
             order.status = "atm_confirmed" 
         elif pay_method == "COD": 
             order.status = "cod_confirmed"
         order.status = "pending"
-#        order.payment_method = pay_method
-#        order.save()
+        order.payment_method = pay_method
+        order.save()
     except Exception:
         logger.exception(f"[enter_receiver_info.save_order] 訂單 {order.order_number} 更新收件資訊失敗")
         return render(request, "enter_receiver_info.html", {
