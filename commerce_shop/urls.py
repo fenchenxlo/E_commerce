@@ -26,6 +26,7 @@ from commerce_shop.views import (
 	cod_store_confirmed,  # 新增 import
     purchased_products,
     enter_receiver_info,  # 【新增】import
+	atm_payment_notify,
     cod_payment_confirmed,  # 【新增】import
     update_cart_item,
     remove_cart_item,
@@ -58,6 +59,7 @@ urlpatterns = [
 	path('cod_store_confirmed/', cod_store_confirmed, name='cod_store_confirmed'),
     path('purchased_products/', purchased_products, name='purchased_products'),# user_order
     path("enter_receiver_info/<str:order_number>/", enter_receiver_info, name="enter_receiver_info"),  # 【新增】
+	path("atm_payment_notify/", atm_payment_notify, name="atm_payment_notify",),
     path('cod_payment_confirmed/', cod_payment_confirmed, name='cod_payment_confirmed'),  # 【新增】
     path('delete_order/<int:order_id>/', delete_order, name='delete_order'), # 刪除user_order
     path('delete_order_item/<int:order_item_id>/', delete_order_item, name='delete_order_item'), # 刪除user order_item
