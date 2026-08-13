@@ -539,7 +539,7 @@ def enter_receiver_info(request, order_number):
             order.status = "atm_confirmed" 
         elif pay_method == "COD": 
             order.status = "cod_confirmed"
-        order.status = "pending"
+
         order.payment_method = pay_method
         order.save()
     except Exception:
