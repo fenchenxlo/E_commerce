@@ -583,6 +583,8 @@ def enter_receiver_info(request, order_number):
         order_total = sum(item.price * item.quantity for item in items)
         shipping_fee = 60
         total_with_shipping = order_total + shipping_fee
+        order.total_amount = total_with_shipping
+		order.save()
     except Exception:
         logger.exception(f"[enter_receiver_info.calc_amount] 訂單 {order.order_number} 計算金額失敗")
         return render(request, "enter_receiver_info.html", {
