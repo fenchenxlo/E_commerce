@@ -368,18 +368,43 @@ def atm_payment_notify(request):
 
     expire_date = timezone.make_aware(expire_date)
 
-    payment, created = Payment.objects.update_or_create(
+    # ---------------------------------------------------------
+    # 7. 建立「新的 Payment」
+    #
+    # ★ 這裡是這次修正的核心 ★
+    #
+    # 原本：
+    #
+    # payment, created = Payment.objects.update_or_create(
+    #     order=order,
+    #     ...
+    # )
+    #
+    # 問題：
+    #
+    # 同一個 Order 如果已經存在兩筆 Payment，
+    # Django 執行 get(order=order) 時就會：
+    #
+    # MultipleObjectsReturned
+    #
+    # 現在改成：
+    #
+    # Payment.objects.create(...)
+    #
+    # 每一次交易通知都建立一筆新的 Payment。
+    # ---------------------------------------------------------
+	
+    payment = Payment.objects.create(
         order=order,
         payment_method="ATM",
-        defaults={
-            'bank_code': data["bank_code"],
-            'v_account': data["v_account"],
-            'expire_date': expire_date,
-            'status': data.get("status","atm_created"),
-            'amount': data["trade_amt"],
-            'transaction_id': str(uuid.uuid4()),
-            'response_data': data,
-        }
+
+        'bank_code': data["bank_code"],
+        'v_account': data["v_account"],
+        'expire_date': expire_date,
+        'status': data.get("status","atm_created"),
+        'amount': data["trade_amt"],
+        'transaction_id': str(uuid.uuid4()),
+        'response_data': data,
     )
 
     return JsonResponse({
