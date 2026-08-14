@@ -398,13 +398,13 @@ def atm_payment_notify(request):
         order=order,
         payment_method="ATM",
 
-        'bank_code': data["bank_code"],
-        'v_account': data["v_account"],
-        'expire_date': expire_date,
-        'status': data.get("status","atm_created"),
-        'amount': data["trade_amt"],
-        'transaction_id': str(uuid.uuid4()),
-        'response_data': data,
+        'bank_code'= data["bank_code"],
+        'v_account'= data["v_account"],
+        'expire_date'= expire_date,
+        'status'= data.get("status","atm_created"),
+        'amount'= data["trade_amt"],
+        'transaction_id'= str(uuid.uuid4()),
+        'response_data'= data,
     )
 
     return JsonResponse({
