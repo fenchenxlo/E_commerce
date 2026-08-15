@@ -117,8 +117,8 @@
 						<!-- 【新增】已經確認過付款方式,不再顯示 ATM/COD 選擇按鈕,
 							 改成顯示目前確認的付款資訊,避免使用者重複選、搞混狀態 -->
 						<div style="border:1px solid #ccc; padding:12px; border-radius:8px; background:#f8f8f8;">							
-							{% if order_dict.payment_method == 'COD' or order_dict.payment_method == 'ATM' or order_dict.order.status == 'cod_confirmed' or order_dict.order.status == 'atm_confirmed' %}
-								{% if order_dict.order.status == 'failed' or order_dict.order.status == 'pending' %}
+							{% if order_dict.payment_method == 'COD' or order_dict.payment_method == 'ATM' %}
+								{% if order_dict.order.status == 'failed' or order_dict.order.status == 'pending' or order_dict.order.status == 'cod_confirmed' or order_dict.order.status == 'atm_confirmed'%}
 									<a href="{% url 'enter_receiver_info' order_dict.order.order_number %}"
 									   style="display:inline-block; text-decoration:none; padding:10px 20px;
 											  background:#2b7de9; color:#fff; border-radius:6px;">
