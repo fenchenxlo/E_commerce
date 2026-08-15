@@ -738,11 +738,11 @@ def payment_callback(request):
 	recv_mac = data.pop(
 		"CheckMacValue"
 	)
-
+    logger.info(f"recv_mac={recv_mac}")
 	local_mac = (
 		generate_check_mac_value(data,ECPAY_HASH_KEY,ECPAY_HASH_IV)
 	)
-
+    logger.info(f"local_mac={local_mac}")
 	if recv_mac != local_mac:
 
 		return JsonResponse({
