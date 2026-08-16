@@ -761,14 +761,14 @@ def payment_callback(request):
 			transaction_id=data["transaction_id"],
 			defaults={
 				"amount": data["trade_amt"],
-				"payment_method": "ATM",
+				"payment_method": data.get("payment_method", "ATM"),  # 【修改】原本寫死 "ATM"，改成從 payload 動態帶入，沒帶時預設 ATM 保持相容
 				"status": "success",
 #				  "paid_at": datetime.datetime.strptime(paid_at, "%Y-%m-%d %H:%M:%S"),
 				"paid_at": timezone.now(),
 				"response_data": dict(request.POST),
-				"bank_code": data.get("bank_code"),
-				"v_account": data.get("v_account"),
-				"expire_date": data.get("expire_date"),
+				"bank_code": data.get("bank_code", ""),   # 【修改】COD 沒有 bank_code，用 .get 給預設值避免 KeyError
+				"v_account": data.get("v_account", ""),   # 【修改】同上
+				"expire_date": data.get("expire_date"),   # 保持原樣，見下方 ⚠️ 說明
 			}
 		)
 		
