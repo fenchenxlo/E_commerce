@@ -769,6 +769,9 @@ def payment_callback(request):
 				"bank_code": data.get("bank_code", ""),   # 【修改】COD 沒有 bank_code，用 .get 給預設值避免 KeyError
 				"v_account": data.get("v_account", ""),   # 【修改】同上
 				"expire_date": data.get("expire_date"),   # 保持原樣，見下方 ⚠️ 說明
+				"payment_method": data.get("payment_method","COD"),
+				"cvs_store_name": data.get("cvs_store_name",""),
+				"cvs_store_address": data.get("cvs_store_address",""),
 			}
 		)
 		
