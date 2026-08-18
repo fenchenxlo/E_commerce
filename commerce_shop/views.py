@@ -770,8 +770,8 @@ def payment_callback(request):
 				"v_account": data.get("v_account", ""),   # 【修改】同上
 				"expire_date": data.get("expire_date"),   # 保持原樣，見下方 ⚠️ 說明
 				"payment_method": data.get("payment_method","COD"),
-				"cvs_store_name": data.get("cvs_store_name",""),
-				"cvs_store_address": data.get("cvs_store_address",""),
+#				"cvs_store_name": data.get("cvs_store_name",""),
+#				"cvs_store_address": data.get("cvs_store_address",""),
 			}
 		)
 		
