@@ -344,9 +344,9 @@ class Payment(models.Model):
         blank=True
     )
     
-    bank_code = models.CharField(max_length=3)                    # 銀行代碼
-    v_account = models.CharField(max_length=20)                    # 虛擬銀行帳戶 (通常14-16)
-    expire_date = models.DateTimeField()                         # 繳費期限
+    bank_code = models.CharField(max_length=3, null=True, blank=True)                    # 銀行代碼
+    v_account = models.CharField(max_length=20, null=True, blank=True)                    # 虛擬銀行帳戶 (通常14-16)
+    expire_date = models.DateTimeField(null=True, blank=True)                         # 繳費期限
     
     def __str__(self):
         return f"Payment {self.transaction_id}"
