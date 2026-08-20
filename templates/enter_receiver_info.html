@@ -70,9 +70,13 @@
 		</script>
 
         <button type="submit" class="btn">確認並前往付款</button>
-		<button type="button" onclick="window.location.href='{{ HF_SPACE_E_COMMERCE_URL }}/commerce_shop/purchased_products/'">返回商城</button>
+		<!-- 回商店訂單頁修改付款方式 -->
+		<a href="{{ HF_SPACE_E_COMMERCE_URL }}/commerce_shop/purchased_products/">
+			返回商品頁
+		</a>
+		<!-- <button type="button" onclick="window.location.href='{{ HF_SPACE_E_COMMERCE_URL }}/commerce_shop/purchased_products/'">返回商城</button> -->
 		<!-- <button type="button" onclick="goBack()"> 返回 </button> -->
-		<button type="button" onclick="history.back()">返回</button>
+		<!-- <button type="button" onclick="history.back()">返回</button> -->
     </form>
 </div>
 </body>
