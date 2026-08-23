@@ -811,6 +811,19 @@ def payment_callback(request):
 		payment.save()
 		
 		return JsonResponse({"status":"failed"})
+	elif data["status"] == "cod_confirmed": 
+
+		order.status = "cod_confirmed"
+
+		order.save()
+
+		payment.status = "pending"
+
+		payment.response_data = data
+
+		payment.save()
+		
+		return JsonResponse({"status":"pending"})
 
 @csrf_exempt
 @login_required
