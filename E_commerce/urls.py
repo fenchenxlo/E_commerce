@@ -19,6 +19,15 @@ from django.urls import path,include
 from commerce_shop.views import (
     home,
 )
+# ============================================================
+# 【新增】
+# 唯一 Ninja API。
+#
+# 不從 views.py import api。
+# ============================================================
+
+from commerce_shop.api import api
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -31,4 +40,6 @@ urlpatterns = [
     path('commerce_shop/', include('commerce_shop.urls')),
     path('e_commerce_account/', include('allauth.urls')),
     path('accounts/', include('allauth.urls')),  # <<--- 這一行很重要
+#    path("api/", api.urls, name="api"), # Django Ninja API
+    path("api/", api.urls), # Django Ninja API
 ]

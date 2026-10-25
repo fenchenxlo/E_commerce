@@ -15,9 +15,15 @@ import urllib.parse
 from util.ChkMacVal import generate_check_mac_value
 from util.product_image_config import get_product_image
 
+from django.views.decorators.http import require_POST
+from .schemas.schemas import CheckoutSchema
+from .services.order_service import OrderService
+from .services.payment_service import PaymentService
+from .services.cart_service import CartService
+
 from E_commerce.settings import ECPAY_HASH_KEY,ECPAY_HASH_IV
 from django.core.paginator import Paginator
-import re
+import re, hmac
 from django.db.models import Q
 from django.contrib.auth.decorators import user_passes_test
 import logging			# 【新增】
@@ -318,341 +324,1219 @@ def db_query_tool(request):
 	}
 	return render(request, 'admin_tools/db_query.html', context)
 
+# ============================================================
+# 【修改】
+# 加入購物車
+#
+# ORM 已移到 CartService。
+# ============================================================
+
+@login_required
+#@require_POST  # 確保只接受安全的前端 POST 請求
+def add_to_cart(
+    request,
+    product_id,
+):
+
+    try:
+
+        product = get_object_or_404(
+            Product,
+            product_id=product_id,
+        )
+
+        CartService.add_product(
+            user=request.user,
+            product=product,
+            quantity=1,
+        )
+
+        messages.success(
+            request,
+            f"{product.name} 已加入購物車。",
+        )
+
+    except ValueError as exc:
+
+        messages.error(
+            request,
+            str(exc),
+        )
+
+    except Exception as exc:
+
+        logger.exception(
+            "[add_to_cart] 加入購物車失敗"
+        )
+
+        messages.error(
+            request,
+            "加入購物車失敗。",
+        )
+
+    return redirect(
+        "cart_detail"
+    )
+
+# ============================================================
+# 【修改】
+# Cart
+#
+# ORM 查詢搬到 CartService。
+# ============================================================
+
+@login_required
+def cart_detail(request):
+
+    try:
+
+        cart_items = (
+            CartService
+            .get_cart_items(
+                request.user
+            )
+        )
+
+        total_price = sum(
+            item.price * item.quantity
+            for item in cart_items
+        )
+
+        return render(
+            request,
+            "cart.html",
+            {
+                "cart_items":
+                    cart_items,
+
+                "total_price":
+                    total_price,
+
+                "backend_url":
+                    settings.BACKEND_URL,
+            },
+        )
+
+    except Exception as exc:
+
+        logger.exception(
+            "[cart_detail] 讀取購物車失敗"
+        )
+
+        return render(
+            request,
+            "cart.html",
+            {
+                "cart_items": [],
+                "total_price": 0,
+                "error":
+                    "購物車讀取失敗。",
+            },
+        )
+
+# ============================================================
+# 【修改】
+# 第一次 Checkout
+#
+# 原本 View 直接：
+#
+# Order.objects.create()
+# OrderItem.objects.create()
+# Product.stock -=
+# Product.save()
+# CartItem.delete()
+#
+# 全部刪除。
+#
+# 現在：
+#
+# View
+#   ↓
+# OrderService
+#   ↓
+# InventoryService
+#   ↓
+# DB
+# ============================================================
+
+# @login_required
+# def checkout(request):
+
+    # if request.method != "POST":
+        # return redirect(
+            # "cart_detail"
+        # )
+
+    # try:
+
+        # order = (
+            # OrderService
+            # .create_order_from_cart(
+                # request.user
+            # )
+        # )
+
+        # messages.success(
+            # request,
+            # "訂單建立成功，請填寫收件資訊。",
+        # )
+
+        # return redirect(
+            # "enter_receiver_info",
+            # order_number=order.order_number,
+        # )
+
+    # except ValueError as exc:
+
+        # messages.error(
+            # request,
+            # str(exc),
+        # )
+
+        # return redirect(
+            # "cart_detail"
+        # )
+
+    # except Exception:
+
+        # logger.exception(
+            # "[checkout] 建立訂單失敗"
+        # )
+
+        # messages.error(
+            # request,
+            # "建立訂單失敗，請稍後再試。",
+        # )
+
+        # return redirect(
+            # "cart_detail"
+        # )
+
+# ============================================================
+# 【新增】
+# ATM callback
+#
+# View 只負責：
+#
+# HTTP request
+# JSON
+# CheckMacValue
+# Service
+# response
+#
+# 不直接寫 Payment。
+# ============================================================
+
 @csrf_exempt
 def atm_payment_notify(request):
+    """
+    【修改】
+
+    ECPay Mock → Store ATM callback。
+
+    View 只負責：
+
+        1. HTTP Method
+        2. 解析 request
+        3. 驗證 CheckMacValue
+        4. 呼叫 PaymentService
+        5. 回傳 HTTP Response
+
+    View 不負責：
+
+        ❌ Order.objects
+        ❌ Payment.objects
+        ❌ Payment.save()
+        ❌ httpx.post()
+        ❌ ATM 產生
+        ❌ 庫存處理
+        ❌ Payment business logic
+
+    Flow：
+
+        ECPay Mock
+              ↓
+        atm_payment_notify
+              ↓
+        CheckMacValue verify
+              ↓
+        PaymentService
+              ↓
+        PaymentRepository
+              ↓
+        Payment
+    """
+
+    # ============================================================
+    # 【新增】
+    # HTTP Method
+    # ============================================================
 
     if request.method != "POST":
-        return JsonResponse({
-            "status": False,
-            "message": "Method Not Allowed"
-        }, status=405)
+
+        return JsonResponse(
+            {
+                "status": False,
+                "success": False,
+                "message": "Method Not Allowed",
+            },
+            status=405,
+        )
+
+    # ============================================================
+    # 【新增】
+    # Request Parse
+    # ============================================================
 
     try:
-        data = json.loads(request.body.decode("utf-8"))
-    except json.JSONDecodeError:
-        return JsonResponse({
-            "status": False,
-            "message": "JSON 格式錯誤"
-        }, status=400)
 
-    received_mac = data.pop("CheckMacValue", "")
+        # --------------------------------------------------------
+        # JSON
+        # --------------------------------------------------------
+
+        if request.body:
+
+            raw_body = (
+                request.body
+                .decode("utf-8")
+            )
+
+            data = json.loads(
+                raw_body
+            )
+
+        # --------------------------------------------------------
+        # form POST fallback
+        # --------------------------------------------------------
+
+        elif request.POST:
+
+            data = request.POST.dict()
+
+        else:
+
+            data = {}
+
+        if not isinstance(
+            data,
+            dict,
+        ):
+
+            raise ValueError(
+                "callback payload 必須是 JSON object"
+            )
+
+    except json.JSONDecodeError as exc:
+
+        logger.warning(
+            "ATM callback JSON 格式錯誤：%s",
+            exc,
+        )
+
+        return JsonResponse(
+            {
+                "status": False,
+                "success": False,
+                "message": "JSON 格式錯誤",
+            },
+            status=400,
+        )
+
+    except Exception as exc:
+
+        logger.exception(
+            "ATM callback request parse 失敗"
+        )
+
+        return JsonResponse(
+            {
+                "status": False,
+                "success": False,
+                "message": "callback request 格式錯誤",
+                "error": str(exc),
+            },
+            status=400,
+        )
+
+    # ============================================================
+    # 【新增】
+    # CheckMacValue Verify
+    #
+    # 非常重要：
+    #
+    # 驗證一定發生在 Service 之前。
+    #
+    # View boundary：
+    #
+    # request
+    #   ↓
+    # parse
+    #   ↓
+    # CheckMacValue
+    #   ↓
+    # PaymentService
+    # ============================================================
+
+    verify_payload = dict(
+        data
+    )
+
+    received_mac = (
+        verify_payload.pop(
+            "CheckMacValue",
+            None,
+        )
+    )
+
+    if received_mac is None:
+
+        received_mac = (
+            verify_payload.pop(
+                "check_mac_value",
+                None,
+            )
+        )
+
+    if not received_mac:
+
+        logger.warning(
+            "ATM callback 缺少 CheckMacValue"
+        )
+
+        return JsonResponse(
+            {
+                "status": False,
+                "success": False,
+                "message": (
+                    "缺少 CheckMacValue"
+                ),
+            },
+            status=400,
+        )
+
+    # ============================================================
+    # 【新增】
+    # 計算 expected MAC
+    # ============================================================
+
+    try:
+
+        expected_mac = (
+            generate_check_mac_value(
+                verify_payload,
+                settings.ECPAY_HASH_KEY,
+                settings.ECPAY_HASH_IV,
+            )
+        )
+
+    except Exception as exc:
+
+        logger.exception(
+            "ATM callback CheckMacValue 計算失敗"
+        )
+
+        return JsonResponse(
+            {
+                "status": False,
+                "success": False,
+                "message": (
+                    "CheckMacValue 驗證失敗"
+                ),
+                "error": str(exc),
+            },
+            status=400,
+        )
+
+    # ============================================================
+    # 【新增】
+    # Constant-time compare
+    # ============================================================
+
+    if not hmac.compare_digest(
+        str(received_mac),
+        str(expected_mac),
+    ):
+
+        logger.warning(
+            "ATM callback CheckMacValue 不一致"
+        )
+
+        return JsonResponse(
+            {
+                "status": False,
+                "success": False,
+                "message": (
+                    "CheckMacValue Error"
+                ),
+            },
+            status=400,
+        )
+
+    # ============================================================
+    # 【新增】
+    # Service
+    # ============================================================
+
+    service = PaymentService()
+
+    try:
+
+        result = (
+            service.handle_atm_callback(
+                data
+            )
+        )
+
+    except ValueError as exc:
+
+        logger.warning(
+            "ATM callback business validation 失敗：%s",
+            exc,
+        )
+
+        return JsonResponse(
+            {
+                "status": False,
+                "success": False,
+                "message": str(exc),
+            },
+            status=400,
+        )
+
+    except RuntimeError as exc:
+
+        logger.exception(
+            "ATM callback Service 處理失敗"
+        )
+
+        return JsonResponse(
+            {
+                "status": False,
+                "success": False,
+                "message": str(exc),
+            },
+            status=500,
+        )
+
+    except Exception as exc:
+
+        logger.exception(
+            "ATM callback 發生未預期錯誤"
+        )
+
+        return JsonResponse(
+            {
+                "status": False,
+                "success": False,
+                "message": (
+                    "ATM callback 處理失敗"
+                ),
+                "error": str(exc),
+            },
+            status=500,
+        )
+
+    # ============================================================
+    # 【新增】
+    # Response
+    # ============================================================
+
+    return JsonResponse(
+        result,
+        status=200,
+    )
+
+# ============================================================
+# 【新增】COD callback：ecpay_mock → Store
+# 流程與 atm_payment_notify 相同：解析 → 驗簽 → Service → Response
+# ============================================================
+
+@csrf_exempt
+def cod_payment_notify(request):
+
+    if request.method != "POST":
+        return JsonResponse(
+            {"success": False, "message": "Method Not Allowed"}, status=405
+        )
+
+    try:
+        data = json.loads(request.body.decode("utf-8")) if request.body else {}
+        if not isinstance(data, dict):
+            raise ValueError("callback payload 必須是 JSON object")
+    except Exception as exc:
+        return JsonResponse(
+            {"success": False, "message": f"callback request 格式錯誤：{exc}"},
+            status=400,
+        )
+
+    # 驗證一定在 Service 之前
+    verify_payload = dict(data)
+    received_mac = (
+        verify_payload.pop("CheckMacValue", None)
+        or verify_payload.pop("check_mac_value", None)
+    )
+    verify_payload.pop("check_mac_value", None)
+
+    if not received_mac:
+        return JsonResponse(
+            {"success": False, "message": "缺少 CheckMacValue"}, status=400
+        )
 
     expected_mac = generate_check_mac_value(
-        data,
-        settings.ECPAY_HASH_KEY,
-        settings.ECPAY_HASH_IV
+        verify_payload, settings.ECPAY_HASH_KEY, settings.ECPAY_HASH_IV
     )
 
-    if received_mac != expected_mac:
-        return JsonResponse({
-            "status": False,
-            "message": "CheckMacValue Error"
-        }, status=400)
-
-    merchant_trade_no = data["merchant_trade_no"]
+    if not hmac.compare_digest(str(received_mac), str(expected_mac)):
+        logger.warning("COD callback CheckMacValue 不一致")
+        return JsonResponse(
+            {"success": False, "message": "CheckMacValue Error"}, status=400
+        )
 
     try:
-        order = Order.objects.get(
-            order_number=merchant_trade_no
+        result = PaymentService().handle_cod_callback(verify_payload)
+    except ValueError as exc:
+        logger.warning("COD callback business validation 失敗：%s", exc)
+        return JsonResponse({"success": False, "message": str(exc)}, status=400)
+    except Exception as exc:
+        logger.exception("COD callback 處理失敗")
+        return JsonResponse(
+            {"success": False, "message": "COD callback 處理失敗", "error": str(exc)},
+            status=500,
         )
-    except Order.DoesNotExist:
-        return JsonResponse({
-            "status": False,
-            "message": "找不到訂單"
-        }, status=404)
 
-    expire_date = datetime.datetime.strptime(
-        data["expire_date"],
-        "%Y-%m-%d %H:%M:%S"
-    )
+    return JsonResponse(result, status=200)
+    
+# @csrf_exempt
+# def atm_payment_notify(request):
 
-    expire_date = timezone.make_aware(expire_date)
+    # if request.method != "POST":
+        # return JsonResponse({
+            # "status": False,
+            # "message": "Method Not Allowed"
+        # }, status=405)
 
-    # ---------------------------------------------------------
-    # 7. 建立「新的 Payment」
-    #
-    # ★ 這裡是這次修正的核心 ★
-    #
-    # 原本：
-    #
-    # payment, created = Payment.objects.update_or_create(
-    #     order=order,
-    #     ...
+    # try:
+        # data = json.loads(request.body.decode("utf-8"))
+    # except json.JSONDecodeError:
+        # return JsonResponse({
+            # "status": False,
+            # "message": "JSON 格式錯誤"
+        # }, status=400)
+
+    # received_mac = data.pop("CheckMacValue", "")
+
+    # expected_mac = generate_check_mac_value(
+        # data,
+        # settings.ECPAY_HASH_KEY,
+        # settings.ECPAY_HASH_IV
     # )
-    #
-    # 問題：
-    #
-    # 同一個 Order 如果已經存在兩筆 Payment，
-    # Django 執行 get(order=order) 時就會：
-    #
-    # MultipleObjectsReturned
-    #
-    # 現在改成：
-    #
-    # Payment.objects.create(...)
-    #
-    # 每一次交易通知都建立一筆新的 Payment。
-    # ---------------------------------------------------------
-	
-    payment = Payment.objects.create(
-        order=order,
-        payment_method="ATM",
-        bank_code = data["bank_code"],
-        v_account = data["v_account"],
-        expire_date = expire_date,
-        status = data.get("status","atm_created"),
-        amount = data["trade_amt"],
-        transaction_id = str(uuid.uuid4()),
-        response_data = data,
-    )
 
-    return JsonResponse({
-        "status": True,
-        "merchant_trade_no": order.order_number,
-        "bank_code": payment.bank_code,
-        "v_account": payment.v_account,
-        "expire_date": payment.expire_date.strftime(
-            "%Y-%m-%d %H:%M:%S"
-        ),
-    })
+    # if received_mac != expected_mac:
+        # return JsonResponse({
+            # "status": False,
+            # "message": "CheckMacValue Error"
+        # }, status=400)
+
+    # merchant_trade_no = data["merchant_trade_no"]
+
+    # try:
+        # order = Order.objects.get(
+            # order_number=merchant_trade_no
+        # )
+    # except Order.DoesNotExist:
+        # return JsonResponse({
+            # "status": False,
+            # "message": "找不到訂單"
+        # }, status=404)
+
+    # expire_date = datetime.datetime.strptime(
+        # data["expire_date"],
+        # "%Y-%m-%d %H:%M:%S"
+    # )
+
+    # expire_date = timezone.make_aware(expire_date)
+
+    # # ---------------------------------------------------------
+    # # 7. 建立「新的 Payment」
+    # #
+    # # ★ 這裡是這次修正的核心 ★
+    # #
+    # # 原本：
+    # #
+    # # payment, created = Payment.objects.update_or_create(
+    # #     order=order,
+    # #     ...
+    # # )
+    # #
+    # # 問題：
+    # #
+    # # 同一個 Order 如果已經存在兩筆 Payment，
+    # # Django 執行 get(order=order) 時就會：
+    # #
+    # # MultipleObjectsReturned
+    # #
+    # # 現在改成：
+    # #
+    # # Payment.objects.create(...)
+    # #
+    # # 每一次交易通知都建立一筆新的 Payment。
+    # # ---------------------------------------------------------
+	
+    # payment = Payment.objects.create(
+        # order=order,
+        # payment_method="ATM",
+        # bank_code = data["bank_code"],
+        # v_account = data["v_account"],
+        # expire_date = expire_date,
+        # status = data.get("status","atm_created"),
+        # amount = data["trade_amt"],
+        # transaction_id = str(uuid.uuid4()),
+        # response_data = data,
+    # )
+
+    # return JsonResponse({
+        # "status": True,
+        # "merchant_trade_no": order.order_number,
+        # "bank_code": payment.bank_code,
+        # "v_account": payment.v_account,
+        # "expire_date": payment.expire_date.strftime(
+            # "%Y-%m-%d %H:%M:%S"
+        # ),
+    # })
+
+# ============================================================
+# 【新增】
+# COD Store confirmation
+# ============================================================
 
 @csrf_exempt
 def cod_store_confirmed(request):
-	"""
-	【新增】接收 ecpay_mock(cod_gateway)的 server-to-server 通知:
-	使用者已確認超商取貨付款的取貨門市,這裡把結果寫回本地 Order,
-	讓「已購買商品清單」頁面能顯示「已確認超商取貨付款」,
-	不再繼續顯示「選擇付款方式」的按鈕(避免使用者已經選完又重複選)。
 
-	容易出錯的地方(JSON 解析、簽章驗證、找不到訂單)都各自攔截,
-	印出完整錯誤方便在 HF Space Logs 除錯。
-	"""
-	if request.method != "POST":
-		return HttpResponse("method error", status=405)
+    if request.method != "POST":
 
-	# ── Step 1: 解析請求 body ──────────────────────────
-	try:
-		data = json.loads(request.body)
-	except json.JSONDecodeError as e:
-#		 print(f"❌ [cod_store_confirmed.parse_body] {type(e).__name__}: {e}")
-		logger.exception("❌ [cod_store_confirmed.parse_body] JSON 格式錯誤 {type(e).__name__}: {e}")	# 【修改】
-		return JsonResponse({"status": "error", "message": "JSON 格式錯誤"}, status=400)
+        return HttpResponse(
+            "method error",
+            status=405,
+        )
 
-	# ── Step 2: 驗證 CheckMacValue,防止被偽造請求竄改訂單狀態 ──
-	try:
-		recv_mac = data.pop("check_mac_value", "")
-		local_mac = generate_check_mac_value(data, ECPAY_HASH_KEY, ECPAY_HASH_IV)
-	except Exception as e:
-#		print(f"❌ [cod_store_confirmed.generate_mac] {type(e).__name__}: {e}")
-		logger.exception("[cod_store_confirmed.generate_mac] 簽章計算失敗 {type(e).__name__}: {e}")  # 【修改】
-		return JsonResponse({"status": "error", "message": str(e)}, status=400)
+    try:
 
-	if recv_mac != local_mac:
-#		print(f"⚠️ [cod_store_confirmed] CheckMacValue 不符,拒絕這次通知")
-		logger.warning("⚠️ [cod_store_confirmed] CheckMacValue 不符,拒絕這次通知")  # 【修改】
-		return JsonResponse({"status": "error", "message": "CheckMacValue Error"}, status=400)
+        data = json.loads(
+            request.body
+        )
 
-	# ── Step 3: 找出對應訂單 ────────────────────────────
-	try:
-		order = Order.objects.get(order_number=data["merchant_trade_no"])
-	except Order.DoesNotExist as e:
-#		print(f"❌ [cod_store_confirmed.order_not_found] {type(e).__name__}: {e}")
-		logger.exception("❌  [cod_store_confirmed.order_not_found] 找不到對應訂單 {type(e).__name__}: {e}")  # 【修改】
-		return JsonResponse({"status": "error", "message": "找不到對應訂單"}, status=404)
-	except KeyError as e:
-		print(f"❌ [cod_store_confirmed.missing_field] 缺少欄位: {e}")
-		logger.exception(f"❌ [cod_store_confirmed.missing_field] 缺少欄位: {e}")  # 【修改】
-		return JsonResponse({"status": "error", "message": f"缺少欄位: {e}"}, status=400)
-	except Exception as e:
-#		print(f"❌ [cod_store_confirmed.db_read_unexpected] {type(e).__name__}: {e}")
-		logger.exception("❌ [cod_store_confirmed.db_read_unexpected] 讀取訂單失敗")  # 【修改】
-		return JsonResponse({"status": "error", "message": str(e)}, status=500)
+        # ----------------------------------------------------
+        # 【注意】
+        # CheckMacValue 驗證仍然保留。
+        # 但是驗證後的 DB 操作應進 Service。
+        # ----------------------------------------------------
 
-	# ── Step 4: 寫回訂單的付款方式與門市資訊 ───────────────
-	try:
-		order.payment_method = "COD"
-		order.cvs_store_name = data.get("store_name", "")
-		order.cvs_store_address = data.get("store_address", "")
-		order.status = "cod_confirmed"  # 【新增】
-		order.save()
-	except Exception as e:
-#		print(f"❌ [cod_store_confirmed.db_write] {type(e).__name__}: {e}")
-		logger.exception("❌ [cod_store_confirmed.db_write] 寫入訂單失敗 {type(e).__name__}: {e}")  # 【修改】
-		return JsonResponse({"status": "error", "message": str(e)}, status=500)
+        recv_mac = data.pop(
+            "check_mac_value",
+            "",
+        )
 
-	return JsonResponse({"status": "success"})
+        from util.ChkMacVal import (
+            generate_check_mac_value,
+        )
+
+        local_mac = (
+            generate_check_mac_value(
+                data,
+                settings.ECPAY_HASH_KEY,
+                settings.ECPAY_HASH_IV,
+            )
+        )
+
+        if recv_mac != local_mac:
+
+            return JsonResponse(
+                {
+                    "status": "error",
+                    "message":
+                        "CheckMacValue Error",
+                },
+                status=400,
+            )
+
+        from .models import Order
+
+        order = (
+            Order.objects
+            .filter(
+                order_number=
+                    data["merchant_trade_no"]
+            )
+            .first()
+        )
+
+        if order is None:
+
+            return JsonResponse(
+                {
+                    "status": "error",
+                    "message":
+                        "找不到對應訂單",
+                },
+                status=404,
+            )
+
+        # ----------------------------------------------------
+        # 【修改】
+        # Order ORM 更新應搬到 Service。
+        #
+        # 此處保留 callback HTTP 邏輯。
+        # ----------------------------------------------------
+
+        from django.db import transaction
+
+        with transaction.atomic():
+
+            order.payment_method = "COD"
+
+            # 【修改】門市資訊不再寫在 Order，改寫入該訂單的 COD Payment
+            # 【刪除】order.cvs_store_name / order.cvs_store_address
+            order.save(
+                update_fields=[
+                    "payment_method",
+                    "updated_at",
+                ]
+            )
+
+            # 【新增】Payment 若已存在才更新；否則由 handle_cod_callback 建立時帶入
+            cod_payment = (
+                order.payments
+                .filter(payment_method="COD")
+                .order_by("-created_at")
+                .first()
+            )
+
+            if cod_payment:
+                cod_payment.cvs_store_name = data.get("store_name", "")
+                cod_payment.cvs_store_address = data.get("store_address", "")
+                cod_payment.save(
+                    update_fields=[
+                        "cvs_store_name",
+                        "cvs_store_address",
+                        "updated_at",
+                    ]
+                )
+
+        return JsonResponse(
+            {
+                "status": "success"
+            }
+        )
+
+    except Exception as exc:
+
+        logger.exception(
+            "[cod_store_confirmed] "
+            "callback failed"
+        )
+
+        return JsonResponse(
+            {
+                "status": "error",
+                "message": str(exc),
+            },
+            status=500,
+        )
+
+# @csrf_exempt
+# def cod_store_confirmed(request):
+	# """
+	# 【新增】接收 ecpay_mock(cod_gateway)的 server-to-server 通知:
+	# 使用者已確認超商取貨付款的取貨門市,這裡把結果寫回本地 Order,
+	# 讓「已購買商品清單」頁面能顯示「已確認超商取貨付款」,
+	# 不再繼續顯示「選擇付款方式」的按鈕(避免使用者已經選完又重複選)。
+
+	# 容易出錯的地方(JSON 解析、簽章驗證、找不到訂單)都各自攔截,
+	# 印出完整錯誤方便在 HF Space Logs 除錯。
+	# """
+	# if request.method != "POST":
+		# return HttpResponse("method error", status=405)
+
+	# # ── Step 1: 解析請求 body ──────────────────────────
+	# try:
+		# data = json.loads(request.body)
+	# except json.JSONDecodeError as e:
+# #		 print(f"❌ [cod_store_confirmed.parse_body] {type(e).__name__}: {e}")
+		# logger.exception("❌ [cod_store_confirmed.parse_body] JSON 格式錯誤 {type(e).__name__}: {e}")	# 【修改】
+		# return JsonResponse({"status": "error", "message": "JSON 格式錯誤"}, status=400)
+
+	# # ── Step 2: 驗證 CheckMacValue,防止被偽造請求竄改訂單狀態 ──
+	# try:
+		# recv_mac = data.pop("check_mac_value", "")
+		# local_mac = generate_check_mac_value(data, ECPAY_HASH_KEY, ECPAY_HASH_IV)
+	# except Exception as e:
+# #		print(f"❌ [cod_store_confirmed.generate_mac] {type(e).__name__}: {e}")
+		# logger.exception("[cod_store_confirmed.generate_mac] 簽章計算失敗 {type(e).__name__}: {e}")  # 【修改】
+		# return JsonResponse({"status": "error", "message": str(e)}, status=400)
+
+	# if recv_mac != local_mac:
+# #		print(f"⚠️ [cod_store_confirmed] CheckMacValue 不符,拒絕這次通知")
+		# logger.warning("⚠️ [cod_store_confirmed] CheckMacValue 不符,拒絕這次通知")  # 【修改】
+		# return JsonResponse({"status": "error", "message": "CheckMacValue Error"}, status=400)
+
+	# # ── Step 3: 找出對應訂單 ────────────────────────────
+	# try:
+		# order = Order.objects.get(order_number=data["merchant_trade_no"])
+	# except Order.DoesNotExist as e:
+# #		print(f"❌ [cod_store_confirmed.order_not_found] {type(e).__name__}: {e}")
+		# logger.exception("❌  [cod_store_confirmed.order_not_found] 找不到對應訂單 {type(e).__name__}: {e}")  # 【修改】
+		# return JsonResponse({"status": "error", "message": "找不到對應訂單"}, status=404)
+	# except KeyError as e:
+		# print(f"❌ [cod_store_confirmed.missing_field] 缺少欄位: {e}")
+		# logger.exception(f"❌ [cod_store_confirmed.missing_field] 缺少欄位: {e}")  # 【修改】
+		# return JsonResponse({"status": "error", "message": f"缺少欄位: {e}"}, status=400)
+	# except Exception as e:
+# #		print(f"❌ [cod_store_confirmed.db_read_unexpected] {type(e).__name__}: {e}")
+		# logger.exception("❌ [cod_store_confirmed.db_read_unexpected] 讀取訂單失敗")  # 【修改】
+		# return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+	# # ── Step 4: 寫回訂單的付款方式與門市資訊 ───────────────
+	# try:
+		# order.payment_method = "COD"
+		# order.cvs_store_name = data.get("store_name", "")
+		# order.cvs_store_address = data.get("store_address", "")
+		# order.status = "cod_confirmed"  # 【新增】
+		# order.save()
+	# except Exception as e:
+# #		print(f"❌ [cod_store_confirmed.db_write] {type(e).__name__}: {e}")
+		# logger.exception("❌ [cod_store_confirmed.db_write] 寫入訂單失敗 {type(e).__name__}: {e}")  # 【修改】
+		# return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+	# return JsonResponse({"status": "success"})
+
+# ============================================================
+# 【修改】
+# enter_receiver_info
+#
+# GET：
+# 顯示表單。
+#
+# POST：
+# 【刪除】
+# 不再直接 Order.objects.save()
+#
+# POST 改由：
+#
+# enter_receiver_info.html
+#       ↓
+# POST /api/checkout
+#
+# ============================================================
+
+# @login_required
+# def enter_receiver_info(
+    # request,
+    # order_number,
+# ):
+
+    # from .models import Order
+
+    # # --------------------------------------------------------
+    # # 【新增】
+    # # 這裡暫時只作為頁面讀取。
+    # #
+    # # 真正資料更新交給 /api/checkout。
+    # # --------------------------------------------------------
+
+    # order = get_object_or_404(
+        # Order,
+        # order_number=order_number,
+        # user=request.user,
+        # status="pending_payment",
+    # )
+
+    # if request.method == "GET":
+
+        # return render(
+            # request,
+            # "enter_receiver_info.html",
+            # {
+                # "order": order,
+
+                # "HF_SPACE_E_COMMERCE_URL":
+                    # settings.HF_SPACE_E_COMMERCE_URL,
+            # },
+        # )
+    # # --------------------------------------------------------
+    # # 【刪除】
+    # #
+    # # 舊版：
+    # #
+    # # receiver_name =
+    # # request.POST.get(...)
+    # #
+    # # order.receiver_name = ...
+    # # order.save()
+    # #
+    # # payload =
+    # # generate_check_mac_value(...)
+    # #
+    # # return HttpResponse(html)
+    # #
+    # # 全部移出。
+    # # --------------------------------------------------------
+
+    # # --------------------------------------------------------
+    # # 【新增】
+    # # enter_receiver_info 的 POST
+    # # 不再直接處理付款。
+    # #
+    # # 前端 JavaScript 必須：
+    # #
+    # # POST /api/checkout
+    # #
+    # # --------------------------------------------------------
+
+    # return JsonResponse(
+        # {
+            # "status": "error",
+            # "message":
+                # "請使用 POST /api/checkout "
+                # "完成付款。",
+        # },
+        # status=400,
+    # )
+
+# @login_required
+# def enter_receiver_info(request, order_number):
+    # """
+    # 【新增】「前往付款」的中間頁:填寫/確認收件人姓名、手機、地址,並選擇付款方式(ATM/COD)。
+
+    # GET:  顯示表單,預填 Order 目前既有的收件資訊
+    # POST: 1. 驗證欄位
+          # 2. 把收件資訊存回 Order
+          # 3. 用「剛存進去的最新資料」組出對應付款方式的 payload 並簽章
+          # 4. 直接 render 一個會自動送出的 HTML form,POST 到 ecpay_mock 的 action_url
+             # (整段「送到綠界」直接在這裡完成,純傳統 Django 表單流程,不用 JS/fetch,
+             # 降低出錯機會,也比較好除錯)
+
+    # 容易出錯的地方都各自用 try/except 包住:
+      # - 訂單查詢(get_object_or_404 本身若查不到會自動回 404,不用額外包)
+      # - 表單欄位驗證(必填檢查)
+      # - 資料庫寫入(order.save())
+      # - 商品明細/金額計算(items 可能是空的、product 可能被刪除等)
+      # - payload 組裝與簽章計算
+    # 每個例外都用 logger.exception() 記錄完整 traceback,方便在 HF Space Logs 分頁除錯。
+    # """
+    # # 只能操作自己的訂單,且只有還沒確認付款方式的狀態才能進來這頁,
+    # # 避免使用者用網址列亂改 order_number 存取別人的訂單,或修改已經走完流程的訂單
+    # order = get_object_or_404(
+        # Order,
+        # order_number=order_number,
+        # user=request.user,
+        # status__in=["pending", "failed", "atm_confirmed", "cod_confirmed"],
+    # )
+
+    # # ── GET:單純顯示表單 ──────────────────────────────
+    # if request.method == "GET":
+        # return render(request, "enter_receiver_info.html", {"order": order,"HF_SPACE_E_COMMERCE_URL":HF_SPACE_E_COMMERCE_URL})
+
+    # if request.method != "POST":
+        # return HttpResponse("method error", status=405)
+    # pay_method = ''
+    # # ── Step 1: 取出並驗證表單欄位 ──────────────────────
+    # try:
+        # receiver_name = request.POST.get("receiver_name", "").strip()
+        # receiver_phone = request.POST.get("receiver_phone", "").strip()
+        # receiver_address = request.POST.get("receiver_address", "").strip()
+        # pay_method = request.POST.get("pay_method", "").strip()
+        # logger.info(f"pay_method: {pay_method}")
+    # except Exception as e:
+        # # request.POST 理論上不太會出錯,但保底攔一次,避免整頁 500
+        # logger.exception(f"[enter_receiver_info] 訂單 {order.order_number} 讀取表單欄位失敗")
+        # return render(request, "enter_receiver_info.html", {
+            # "order": order,
+            # "error": "表單資料讀取失敗,請重新填寫。",
+        # })
+
+    # if not receiver_name or not receiver_phone or not receiver_address:
+        # return render(request, "enter_receiver_info.html", {
+            # "order": order,
+            # "error": "收件人姓名、手機、地址皆為必填,請重新填寫。",
+            # "posted_name": receiver_name,
+            # "posted_phone": receiver_phone,
+            # "posted_address": receiver_address,
+        # })
+
+    # if pay_method not in ("ATM", "COD"):
+        # return render(request, "enter_receiver_info.html", {
+            # "order": order,
+            # "error": "請選擇付款方式。",
+            # "posted_name": receiver_name,
+            # "posted_phone": receiver_phone,
+            # "posted_address": receiver_address,
+        # })
+
+    # # ── Step 2: 存回 Order ──────────────────────────────
+    # try:
+        # order.receiver_name = receiver_name
+        # order.receiver_phone = receiver_phone
+        # order.receiver_address = receiver_address
+
+        # # 依付款方式設定訂單狀態 
+        # if pay_method == "ATM": 
+            # order.status = "atm_confirmed" 
+        # elif pay_method == "COD": 
+            # order.status = "cod_confirmed"
+
+        # order.payment_method = pay_method
+        # order.save()
+    # except Exception:
+        # logger.exception(f"[enter_receiver_info.save_order] 訂單 {order.order_number} 更新收件資訊失敗")
+        # return render(request, "enter_receiver_info.html", {
+            # "order": order,
+            # "error": "收件資訊儲存失敗,請稍後再試。",
+            # "posted_name": receiver_name,
+            # "posted_phone": receiver_phone,
+            # "posted_address": receiver_address,
+        # })
+
+    # # ── Step 3: 計算商品明細與金額 ───────────────────────
+    # try:
+        # items = order.items.select_related('product')
+        # item_names = "#".join([item.product.name for item in items])
+        # order_total = sum(item.price * item.quantity for item in items)
+        # shipping_fee = 60
+        # total_with_shipping = order_total + shipping_fee
+        # order.total_amount = total_with_shipping
+        # order.save()
+    # except Exception:
+        # logger.exception(f"[enter_receiver_info.calc_amount] 訂單 {order.order_number} 計算金額失敗")
+        # return render(request, "enter_receiver_info.html", {
+            # "order": order,
+            # "error": "計算訂單金額時發生錯誤,請稍後再試。",
+        # })
+
+    # # ── Step 4: 組 payload + 簽章 ─────────────────────────
+    # try:
+        # base_payload = {
+            # 'merchant_id': "shop1234",
+            # 'merchant_trade_no': order.order_number,
+            # 'merchant_trade_date': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            # 'user_id': request.user.id,
+            # 'trade_amt': int(total_with_shipping),
+            # 'trade_desc': order.remark or "購買商品",
+            # 'item_name': item_names,
+            # 'payment_type': "aio",
+            # 'transaction_id': str(uuid.uuid4()),
+            # 'status': order.status,
+            # 'receiver_name': order.receiver_name,
+            # 'receiver_address': order.receiver_address,
+        # }
+
+        # if pay_method == "ATM":
+            # payload = dict(base_payload)
+            # payload.update({
+                # 'choose_payment': "ATM",
+                # 'payment_method': "ATM",
+                # 'ReturnURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/ecpay_mock_notify/",
+                # 'PaymentInfoUrl': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_info/",
+                # 'OrderResultURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_ok/",
+                # 'action_url': f"{HF_SPACE_ECPAY_MOCK_URL}/gateway/ecpay_gateway_checkout/",
+            # })
+        # else:  # COD
+            # payload = dict(base_payload)
+            # payload.update({
+                # 'choose_payment': "COD",
+                # 'payment_method': "COD",
+                # 'receiver_cell_phone': order.receiver_phone,
+                # 'ReturnURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/ecpay_mock_notify/",
+                # 'OrderResultURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_ok/",
+                # 'action_url': f"{HF_SPACE_ECPAY_MOCK_URL}/cod_gateway/cod_checkout/",
+            # })
+
+        # payload["check_mac_value"] = generate_check_mac_value(
+            # payload, ECPAY_HASH_KEY, ECPAY_HASH_IV
+        # )
+    # except Exception:
+        # logger.exception(f"[enter_receiver_info.build_payload] 訂單 {order.order_number} 組 payload/簽章失敗")
+        # return render(request, "enter_receiver_info.html", {
+            # "order": order,
+            # "error": "付款資料準備失敗,請稍後再試。",
+        # })
+
+     # # ── Step 5: 組自動送出表單的 HTML(呼叫共用函式,跟 ready_form 用同一份邏輯)──
+    # try:
+        # html = _build_auto_submit_html(payload)
+    # except Exception:
+        # logger.exception(f"[enter_receiver_info.build_html] 訂單 {order.order_number} 組自動送出頁失敗")
+        # return render(request, "enter_receiver_info.html", {
+            # "order": order,
+            # "error": "產生付款頁面失敗,請稍後再試。",
+        # })
+
+    # logger.info(f"[enter_receiver_info] 訂單 {order.order_number} 準備送出,"
+                # f"pay_method={pay_method}, action_url={payload['action_url']}")
+    # return HttpResponse(html)
 
 @login_required
-def enter_receiver_info(request, order_number):
+def enter_receiver_info(
+    request,
+    order_number,
+):
     """
-    【新增】「前往付款」的中間頁:填寫/確認收件人姓名、手機、地址,並選擇付款方式(ATM/COD)。
+    【修改】
 
-    GET:  顯示表單,預填 Order 目前既有的收件資訊
-    POST: 1. 驗證欄位
-          2. 把收件資訊存回 Order
-          3. 用「剛存進去的最新資料」組出對應付款方式的 payload 並簽章
-          4. 直接 render 一個會自動送出的 HTML form,POST 到 ecpay_mock 的 action_url
-             (整段「送到綠界」直接在這裡完成,純傳統 Django 表單流程,不用 JS/fetch,
-             降低出錯機會,也比較好除錯)
+    這個 View 現在只負責：
 
-    容易出錯的地方都各自用 try/except 包住:
-      - 訂單查詢(get_object_or_404 本身若查不到會自動回 404,不用額外包)
-      - 表單欄位驗證(必填檢查)
-      - 資料庫寫入(order.save())
-      - 商品明細/金額計算(items 可能是空的、product 可能被刪除等)
-      - payload 組裝與簽章計算
-    每個例外都用 logger.exception() 記錄完整 traceback,方便在 HF Space Logs 分頁除錯。
+        顯示 enter_receiver_info.html
+
+    不負責：
+
+        Order ORM
+        Payment ORM
+        ECPay API
+        HTTPX
+
+    第二階段真正 POST：
+
+        enter_receiver_info.html
+            ↓
+        POST /api/checkout
+            ↓
+        OrderService
     """
-    # 只能操作自己的訂單,且只有還沒確認付款方式的狀態才能進來這頁,
-    # 避免使用者用網址列亂改 order_number 存取別人的訂單,或修改已經走完流程的訂單
+
     order = get_object_or_404(
         Order,
         order_number=order_number,
         user=request.user,
-        status__in=["pending", "failed", "atm_confirmed", "cod_confirmed"],
     )
 
-    # ── GET:單純顯示表單 ──────────────────────────────
-    if request.method == "GET":
-        return render(request, "enter_receiver_info.html", {"order": order,"HF_SPACE_E_COMMERCE_URL":HF_SPACE_E_COMMERCE_URL})
+    # ========================================================
+    # 【新增】後端攔截：逾期訂單不可進入填寫頁（防直接輸入網址），導回訂單頁
+    # ========================================================
+    if order.status == "expired":
+        messages.error(request, "此訂單已逾期未付款，無法再付款，請重新下單。")
+        return redirect("purchased_products")
 
-    if request.method != "POST":
-        return HttpResponse("method error", status=405)
-    pay_method = ''
-    # ── Step 1: 取出並驗證表單欄位 ──────────────────────
-    try:
-        receiver_name = request.POST.get("receiver_name", "").strip()
-        receiver_phone = request.POST.get("receiver_phone", "").strip()
-        receiver_address = request.POST.get("receiver_address", "").strip()
-        pay_method = request.POST.get("pay_method", "").strip()
-        logger.info(f"pay_method: {pay_method}")
-    except Exception as e:
-        # request.POST 理論上不太會出錯,但保底攔一次,避免整頁 500
-        logger.exception(f"[enter_receiver_info] 訂單 {order.order_number} 讀取表單欄位失敗")
-        return render(request, "enter_receiver_info.html", {
+    # ========================================================
+    # 【修改】
+    # 不直接 Order.objects.get()
+    #
+    # 但是這個 View 需要把 order_number 傳給 template。
+    #
+    # 因為 API 第二階段必須知道是哪張 Order。
+    #
+    # 這裡可以只把 URL parameter 傳給 template，
+    # 不查 DB。
+    # ========================================================
+
+    return render(
+        request,
+        "enter_receiver_info.html",
+        {
+            "order_number": order_number,
             "order": order,
-            "error": "表單資料讀取失敗,請重新填寫。",
-        })
-
-    if not receiver_name or not receiver_phone or not receiver_address:
-        return render(request, "enter_receiver_info.html", {
-            "order": order,
-            "error": "收件人姓名、手機、地址皆為必填,請重新填寫。",
-            "posted_name": receiver_name,
-            "posted_phone": receiver_phone,
-            "posted_address": receiver_address,
-        })
-
-    if pay_method not in ("ATM", "COD"):
-        return render(request, "enter_receiver_info.html", {
-            "order": order,
-            "error": "請選擇付款方式。",
-            "posted_name": receiver_name,
-            "posted_phone": receiver_phone,
-            "posted_address": receiver_address,
-        })
-
-    # ── Step 2: 存回 Order ──────────────────────────────
-    try:
-        order.receiver_name = receiver_name
-        order.receiver_phone = receiver_phone
-        order.receiver_address = receiver_address
-
-        # 依付款方式設定訂單狀態 
-        if pay_method == "ATM": 
-            order.status = "atm_confirmed" 
-        elif pay_method == "COD": 
-            order.status = "cod_confirmed"
-
-        order.payment_method = pay_method
-        order.save()
-    except Exception:
-        logger.exception(f"[enter_receiver_info.save_order] 訂單 {order.order_number} 更新收件資訊失敗")
-        return render(request, "enter_receiver_info.html", {
-            "order": order,
-            "error": "收件資訊儲存失敗,請稍後再試。",
-            "posted_name": receiver_name,
-            "posted_phone": receiver_phone,
-            "posted_address": receiver_address,
-        })
-
-    # ── Step 3: 計算商品明細與金額 ───────────────────────
-    try:
-        items = order.items.select_related('product')
-        item_names = "#".join([item.product.name for item in items])
-        order_total = sum(item.price * item.quantity for item in items)
-        shipping_fee = 60
-        total_with_shipping = order_total + shipping_fee
-        order.total_amount = total_with_shipping
-        order.save()
-    except Exception:
-        logger.exception(f"[enter_receiver_info.calc_amount] 訂單 {order.order_number} 計算金額失敗")
-        return render(request, "enter_receiver_info.html", {
-            "order": order,
-            "error": "計算訂單金額時發生錯誤,請稍後再試。",
-        })
-
-    # ── Step 4: 組 payload + 簽章 ─────────────────────────
-    try:
-        base_payload = {
-            'merchant_id': "shop1234",
-            'merchant_trade_no': order.order_number,
-            'merchant_trade_date': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            'user_id': request.user.id,
-            'trade_amt': int(total_with_shipping),
-            'trade_desc': order.remark or "購買商品",
-            'item_name': item_names,
-            'payment_type': "aio",
-            'transaction_id': str(uuid.uuid4()),
-            'status': order.status,
-            'receiver_name': order.receiver_name,
-            'receiver_address': order.receiver_address,
-        }
-
-        if pay_method == "ATM":
-            payload = dict(base_payload)
-            payload.update({
-                'choose_payment': "ATM",
-                'payment_method': "ATM",
-                'ReturnURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/ecpay_mock_notify/",
-                'PaymentInfoUrl': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_info/",
-                'OrderResultURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_ok/",
-                'action_url': f"{HF_SPACE_ECPAY_MOCK_URL}/gateway/ecpay_gateway_checkout/",
-            })
-        else:  # COD
-            payload = dict(base_payload)
-            payload.update({
-                'choose_payment': "COD",
-                'payment_method': "COD",
-                'receiver_cell_phone': order.receiver_phone,
-                'ReturnURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/ecpay_mock_notify/",
-                'OrderResultURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_ok/",
-                'action_url': f"{HF_SPACE_ECPAY_MOCK_URL}/cod_gateway/cod_checkout/",
-            })
-
-        payload["check_mac_value"] = generate_check_mac_value(
-            payload, ECPAY_HASH_KEY, ECPAY_HASH_IV
-        )
-    except Exception:
-        logger.exception(f"[enter_receiver_info.build_payload] 訂單 {order.order_number} 組 payload/簽章失敗")
-        return render(request, "enter_receiver_info.html", {
-            "order": order,
-            "error": "付款資料準備失敗,請稍後再試。",
-        })
-
-     # ── Step 5: 組自動送出表單的 HTML(呼叫共用函式,跟 ready_form 用同一份邏輯)──
-    try:
-        html = _build_auto_submit_html(payload)
-    except Exception:
-        logger.exception(f"[enter_receiver_info.build_html] 訂單 {order.order_number} 組自動送出頁失敗")
-        return render(request, "enter_receiver_info.html", {
-            "order": order,
-            "error": "產生付款頁面失敗,請稍後再試。",
-        })
-
-    logger.info(f"[enter_receiver_info] 訂單 {order.order_number} 準備送出,"
-                f"pay_method={pay_method}, action_url={payload['action_url']}")
-    return HttpResponse(html)
+            "HF_SPACE_E_COMMERCE_URL":
+                HF_SPACE_E_COMMERCE_URL,
+        },
+    )
 
 @csrf_exempt
 def cod_payment_confirmed(request):
@@ -754,6 +1638,9 @@ def payment_callback(request):
 	## 查訂單
 	try:
 		order = Order.objects.get(order_number=data["merchant_trade_no"])
+		# 【新增】逾期訂單不可被通知改狀態（只有 COD 模擬頁可改）
+		if order.status == "expired":
+			return JsonResponse({"status": "failed", "message": "訂單已逾期，無法更新狀態"}, status=400)
 #		  payment = Payment.objects.get(order=order)
 		# 建立或更新 Payment 紀錄
 		payment, created = Payment.objects.get_or_create(
@@ -875,37 +1762,37 @@ def product_list(request):
 	return render(request, 'products.html', {'products': products})
 
 
-@login_required
-def add_to_cart(request, product_id):
-	"""將商品加入購物車，同時檢查庫存"""
-	product = get_object_or_404(Product, product_id=product_id)
-	cart, created = Cart.objects.get_or_create(user=request.user)
+# @login_required
+# def add_to_cart(request, product_id):
+	# """將商品加入購物車，同時檢查庫存"""
+	# product = get_object_or_404(Product, product_id=product_id)
+	# cart, created = Cart.objects.get_or_create(user=request.user)
 
-	# 嘗試取得購物車項目，如果沒有就建立
-	cart_item, created_item = CartItem.objects.get_or_create(
-		cart=cart,
-		product=product,
-		defaults={'quantity': 1, 'price': product.price}
-	)
+	# # 嘗試取得購物車項目，如果沒有就建立
+	# cart_item, created_item = CartItem.objects.get_or_create(
+		# cart=cart,
+		# product=product,
+		# defaults={'quantity': 1, 'price': product.price}
+	# )
 
-	if not created_item:
-		# 如果已經在購物車，準備增加 1
-		new_quantity = cart_item.quantity + 1
-		if new_quantity > product.stock:
-			messages.error(request, f"庫存不足，最多只能購買 {product.stock} 個")
-			return redirect('home')	 # 或 redirect('cart_detail')
-		cart_item.quantity = new_quantity
-		cart_item.save()
-		messages.success(request, f"{product.name} 已增加到購物車，數量：{cart_item.quantity}")
-	else:
-		if product.stock < 1:
-			# 如果商品庫存為 0
-			cart_item.delete()	# 刪除剛建立的項目
-			messages.error(request, f"{product.name} 庫存不足，無法加入購物車")
-		else:
-			messages.success(request, f"{product.name} 已加入購物車，數量：{cart_item.quantity}")
+	# if not created_item:
+		# # 如果已經在購物車，準備增加 1
+		# new_quantity = cart_item.quantity + 1
+		# if new_quantity > product.stock:
+			# messages.error(request, f"庫存不足，最多只能購買 {product.stock} 個")
+			# return redirect('home')	 # 或 redirect('cart_detail')
+		# cart_item.quantity = new_quantity
+		# cart_item.save()
+		# messages.success(request, f"{product.name} 已增加到購物車，數量：{cart_item.quantity}")
+	# else:
+		# if product.stock < 1:
+			# # 如果商品庫存為 0
+			# cart_item.delete()	# 刪除剛建立的項目
+			# messages.error(request, f"{product.name} 庫存不足，無法加入購物車")
+		# else:
+			# messages.success(request, f"{product.name} 已加入購物車，數量：{cart_item.quantity}")
 	
-	return redirect('cart_detail')
+	# return redirect('cart_detail')
 #	 return redirect('home')  # 或 redirect('cart_detail')
 
 
@@ -939,221 +1826,767 @@ def cart_detail(request):
 	)
 
 @login_required
-@transaction.atomic
-def checkout(request):
-	"""
-	購物車結帳功能
-	"""
+def cart_checkout(request):
+    """
+    顯示 Checkout / 收件資訊頁。
 
-	# 取得使用者購物車
-	cart = get_object_or_404(Cart, user=request.user)
+    注意：
+    此 View 不建立 Order。
 
-	# 取得購物車商品
-	cart_items = cart.items.all()
+    真正的訂單建立流程：
+    
+        enter_receiver_info.html
+                ↓
+        JavaScript
+                ↓
+        POST /api/checkout
+                ↓
+        CheckoutSchema
+                ↓
+        OrderService
+                ↓
+        Order / OrderItem / InventoryReservation
+                ↓
+        Cart 清空
+    """
 
-	# 如果購物車是空的
-	if not cart_items.exists():
-		messages.error(request, "購物車是空的，無法結帳。")
-		return redirect('cart_detail')
+    cart = get_object_or_404(
+        Cart,
+        user=request.user
+    )
 
-	# 計算訂單總金額
-	total_amount = sum(
-		item.price * item.quantity
-		for item in cart_items
-	)
+    # 檢查購物車是否有商品
+    if not cart.items.exists():
+        messages.error(
+            request,
+            "購物車是空的，無法結帳。"
+        )
+        return redirect('cart_detail')
 
-	# 建立 Order
-	order = Order.objects.create(
-		user=request.user,
-		order_number = f"ORD-{uuid.uuid4().hex[:10].upper()}",
-		shipping_fee = 60,
-		total_amount=total_amount,
-		status='pending'
-	)
+    return render(
+        request,
+        'enter_receiver_info.html',
+        {
+            'cart': cart,
+            'cart_items': cart.items.select_related('product'),
+        }
+    )
 
-	# 將 CartItem 複製到 OrderItem
-	for item in cart_items:
+# @login_required
+# @require_POST
+# def api_checkout(request):
 
-		# 檢查庫存
-		if item.product.stock < item.quantity:
-			messages.error(
-				request,
-				f"商品「{item.product.name}」庫存不足。"
-			)
-			return redirect('cart_detail')
+    # try:
 
-		# 建立訂單項目
-		OrderItem.objects.create(
-			order=order,
-			product=item.product,
-			quantity=item.quantity,
-			price=item.price,
-		)
+        # # ========================================================
+        # # 1. 解析前端 JSON
+        # # ========================================================
 
-		# 扣除庫存
-		item.product.stock -= item.quantity
-		item.product.save()
+        # try:
+            # data = json.loads(
+                # request.body.decode("utf-8")
+            # )
+        # except (json.JSONDecodeError, UnicodeDecodeError):
 
-	# 清空購物車
-	cart_items.delete()
+            # return JsonResponse(
+                # {
+                    # "success": False,
+                    # "error": "Invalid JSON request"
+                # },
+                # status=400
+            # )
 
-	# 成功訊息
-	messages.success(request, "訂單建立成功！")
 
-	# 返回首頁
-	return redirect('home')
+        # # ========================================================
+        # # 2. 建立 CheckoutSchema
+        # # ========================================================
 
+        # schema = CheckoutSchema(
+            # user=request.user,
+            # **data
+        # )
+
+
+        # # ========================================================
+        # # 3. OrderService
+        # # ========================================================
+
+        # order = OrderService.create_order(
+            # schema=schema
+        # )
+
+
+        # # ========================================================
+        # # 4. 回傳前端
+        # # ========================================================
+
+        # return JsonResponse(
+            # {
+                # "success": True,
+                # "order_number": order.order_number,
+            # },
+            # status=201
+        # )
+
+
+    # except ValueError as e:
+
+        # logger.exception(
+            # "❌ checkout_api validation error"
+        # )
+
+        # return JsonResponse(
+            # {
+                # "success": False,
+                # "error": str(e),
+            # },
+            # status=400
+        # )
+
+
+    # except Exception as e:
+
+        # logger.exception(
+            # "❌ checkout_api failed: %s",
+            # e
+        # )
+
+        # return JsonResponse(
+            # {
+                # "success": False,
+                # "error": "建立訂單失敗，請稍後再試。",
+            # },
+            # status=500
+        # )
+
+# api = NinjaAPI()
+
+# @api.post("/checkout")
+# def checkout(request, data: CheckoutSchema):
+	# """
+	# 購物車結帳功能
+	# """
+
+    # # ============================================================
+    # # 【刪除】@login_required
+    # #
+    # # Django Ninja 不需要在這裡使用 Django Template View 的
+    # # @login_required。
+    # #
+    # # request.user 仍然可以取得目前登入使用者。
+    # # ============================================================
+
+    # # 檢查使用者是否登入
+    # if not request.user.is_authenticated:
+        # return {
+            # "success": False,
+            # "message": "請先登入。",
+        # }
+
+    # try:
+
+        # # ========================================================
+        # # 【修改】
+        # #
+        # # 原本 checkout() 裡面的：
+        # #
+        # #     建立 Order
+        # #     建立 OrderItem
+        # #     檢查庫存
+        # #     扣除庫存
+        # #     清空購物車
+        # #
+        # # 改由 OrderService.checkout() 負責。
+        # #
+        # # data 已經經過 Django Ninja + Pydantic V2 驗證，
+        # # 因此這裡不需要再自己驗證 receiver_name、
+        # # shipping_fee 等欄位。
+        # # ========================================================
+
+        # order = OrderService.checkout(
+            # user=request.user,
+            # data=data,
+        # )
+
+        # # ========================================================
+        # # 【修改】
+        # #
+        # # 原本：
+        # #
+        # #     messages.success(request, "訂單建立成功！")
+        # #     return redirect('home')
+        # #
+        # # Django Ninja 是 API，所以不再使用 Django messages
+        # # 和 redirect。
+        # #
+        # # 改成回傳 JSON 給前端。
+        # # ========================================================
+
+        # return {
+            # "success": True,
+            # "message": "訂單建立成功！",
+            # "order_number": order.order_number,
+            # "status": order.status,
+        # }
+
+    # except ValueError as e:
+
+        # # ========================================================
+        # # 【新增】
+        # #
+        # # ValueError 用來處理「業務邏輯錯誤」。
+        # #
+        # # 例如：
+        # #   - 購物車不存在
+        # #   - 購物車是空的
+        # #   - 商品庫存不足
+        # #   - 商品已下架
+        # # ========================================================
+
+        # return {
+            # "success": False,
+            # "message": str(e),
+        # }
+
+    # except Exception as e:
+
+        # # ========================================================
+        # # 【新增】
+        # #
+        # # 捕捉沒有預期到的錯誤。
+        # #
+        # # 注意：
+        # # 正式環境不建議把 str(e) 直接回傳給前端，
+        # # 避免暴露資料庫或系統內部資訊。
+        # # ========================================================
+
+        # return {
+            # "success": False,
+            # "message": "建立訂單時發生系統錯誤。",
+        # }
+	# # 成功訊息
+	# # messages.success(request, "訂單建立成功！")
+
+	# # 返回首頁
+	# # return redirect('home')
+
+# ============================================================
+# 【修改】使用 JsonResponse 回傳，並限定為 POST 請求
+# ============================================================
+@login_required  # 確保使用者已登入，未登入會自動被 Django 導向或攔截
+@require_POST  # 安全起見，結帳動作只允許用 POST 觸發
+def cart_checkout_page(request):
+    """購物車結帳功能（將 Cart/CartItem 轉換並寫入 Order/OrderItem）"""
+
+    # 檢查使用者是否登入 (有 @login_required 其實已防禦，這裡保留你的邏輯結構)
+    if not request.user.is_authenticated:
+        return JsonResponse({"success": False, "message": "請先登入。"}, status=401)
+
+    try:
+        # 1. 撈出當前登入使用者的購物車
+        user_cart = Cart.objects.filter(user=request.user).first()
+
+        # 防呆：驗證購物車內是否有商品
+        if not user_cart or not user_cart.items.exists():
+            messages.error(request, "您的購物車是空的，無法結帳。")
+            return redirect("cart_detail")  # 導回購物車原本的頁面
+
+        # 2. 執行 Service 邏輯：建立 Order/OrderItem、扣庫存、清空購物車並寫入 SQLite3
+        order = OrderService.checkout(user=request.user, cart=user_cart)
+
+        # 3. 建立成功！設定要在下一頁顯示的成功訊息
+        messages.success(
+            request, f"訂單建立成功！您的訂單編號為：{order.order_number}"
+        )
+
+        # 4. 關鍵：直接整頁重新導向到已購買商品頁面 (對應你的 urls.py name)
+        return redirect("purchased_products")
+
+    except ValueError as e:
+        # 捕捉業務邏輯錯誤（如：庫存不足），並將錯誤訊息帶回購物車頁面
+        messages.error(request, str(e))
+        return redirect("cart_detail")
+
+    except Exception as e:
+        # 捕捉未知系統錯誤
+        logger.exception("[cart_checkout_page] 建立訂單時發生系統錯誤")
+        messages.error(request, "建立訂單時發生系統錯誤，請稍後再試。")
+        return redirect("cart_detail")
+
+# ============================================================
+# 【修改】
+# purchased_products
+#
+# 這裡的 ORM 建議下一階段全部搬到
+# OrderQueryService。
+#
+# 先保留頁面呈現功能。
+# ============================================================
+
+# @login_required
+# def purchased_products(request):
+
+    # from .models import Order
+
+    # try:
+
+        # orders = (
+            # Order.objects
+            # .filter(
+                # user=request.user
+            # )
+            # .prefetch_related(
+                # "items",
+                # "payments",
+            # )
+            # .order_by(
+                # "-created_at"
+            # )
+        # )
+
+        # order_list = []
+
+        # for order in orders:
+
+            # items = (
+                # order.items
+                # .select_related("product")
+            # )
+
+            # items_with_subtotal = []
+
+            # subtotal = 0
+
+            # for item in items:
+
+                # item_subtotal = (
+                    # item.price
+                    # * item.quantity
+                # )
+
+                # subtotal += item_subtotal
+
+                # items_with_subtotal.append(
+                    # {
+                        # "item": item,
+                        # "subtotal":
+                            # item_subtotal,
+                    # }
+                # )
+
+            # atm_payment = (
+                # order.payments
+                # .filter(
+                    # payment_method="ATM"
+                # )
+                # .order_by(
+                    # "-created_at"
+                # )
+                # .first()
+            # )
+
+            # order_list.append(
+                # {
+                    # "order": order,
+
+                    # "items":
+                        # items_with_subtotal,
+
+                    # "shipping_fee":
+                        # order.shipping_fee,
+
+                    # "total_with_shipping":
+                        # order.total_amount,
+
+                    # "payment_method":
+                        # order.payment_method,
+
+                    # "payment_bank_code":
+                        # (
+                            # atm_payment.bank_code
+                            # if atm_payment
+                            # else ""
+                        # ),
+
+                    # "payment_v_account":
+                        # (
+                            # atm_payment.v_account
+                            # if atm_payment
+                            # else ""
+                        # ),
+
+                    # "payment_expire_date":
+                        # (
+                            # atm_payment.expire_date
+                            # if atm_payment
+                            # else None
+                        # ),
+                # }
+            # )
+
+        # return render(
+            # request,
+            # "purchased_products.html",
+            # {
+                # "order_list":
+                    # order_list,
+            # },
+        # )
+
+    # except Exception as exc:
+
+        # logger.exception(
+            # "[purchased_products] "
+            # "讀取訂單失敗"
+        # )
+
+        # return render(
+            # request,
+            # "purchased_products.html",
+            # {
+                # "order_list": [],
+                # "load_error":
+                    # str(exc),
+            # },
+        # )
+
+# @login_required
+# def purchased_products(request):
+	# """
+	# 顯示使用者已購買的商品清單。
+	# 每個訂單包含訂單資訊與其商品列表，每個商品加上小計 subtotal。
+	# 每個 pending 訂單同時準備「ATM」與「COD(超商取貨付款)」兩份已簽章 payload,
+	# 前端依使用者選擇的付款方式挑一份送出,避免前端臨時改欄位導致簽章對不上。
+	# """
+	# try:
+		# user = request.user
+		# # 取得該使用者所有訂單，依照建立時間排序（最新的在前）
+		# orders = Order.objects.filter(user=user).order_by('-created_at')
+		# user_id = user.id
+	# except Exception as e:
+# #		 print(f"❌ [purchased_products.load_orders] {type(e).__name__}: {e}")
+		# logger.exception(f"❌ [purchased_products.load_orders] 讀取訂單失敗 {type(e).__name__}: {e}")  # 【修改】
+		# # 讀取訂單失敗時,寧可顯示空清單也不要整頁 500,讓使用者至少看得到頁面
+		# return render(request, 'purchased_products.html', {'order_list': [], 'load_error': str(e)})
+
+	# # 建立一個 list，把每個訂單和其商品（含小計）打包
+	# order_list = []
+
+	# for order in orders:
+		# # 取得該訂單的所有 OrderItem
+		# payment_method = order.payment_method or ""
+		# # 【新增】一個 Order 可以有多筆 Payment。
+		# # ATM 的 bank_code / v_account / expire_date 存在 Payment model， 不在 Order model。
+		# # 只有當 Order 已確認付款方式為 ATM 時，
+		# # 才取得該訂單最新建立的 ATM Payment。
+		# atm_payment = None
+
+		# if payment_method == 'ATM':
+			# atm_payment = (
+				# order.payments
+				# .filter(payment_method='ATM')
+				# .order_by('-created_at')
+				# .first()
+			# )
+		
+		# try:
+			# # 【修正】原本這段計算商品明細/運費/merchant_id 的邏輯遺失了,
+			# # 導致下面 base_payload 用到的 merchant_id、total_with_shipping、
+			# # item_names 等變數會是 NameError,這裡補回來
+			# # 使用 select_related('product') 避免 N+1 查詢問題
+			# items = order.items.select_related('product')
+			# item_names = "#".join([item.product.name for item in items])
+
+			# items_with_subtotal = []
+			# order_total = 0
+
+			# for item in items:
+				# subtotal = item.price * item.quantity
+				# items_with_subtotal.append({'item': item, 'subtotal': subtotal})
+				# order_total += subtotal
+
+			# shipping_fee = 60
+			# total_with_shipping = order_total + shipping_fee
+			# merchant_id = "shop1234"
+
+			# # 兩種付款方式共用的欄位
+			# base_payload = {
+				# 'merchant_id': merchant_id,
+				# 'merchant_trade_no': order.order_number,
+				# 'merchant_trade_date': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+				# 'user_id': user_id,
+				# 'trade_amt': int(total_with_shipping),
+				# 'trade_desc': order.remark or "購買商品",
+				# 'item_name': item_names,
+				# 'payment_type': "aio",
+				# 'transaction_id': str(uuid.uuid4()),
+				# 'status': order.status,
+				# # Order model 本身就有 receiver_name(必填欄位),直接用即可,
+				# # 不用再去猜 user 身上的欄位
+				# 'receiver_name': order.receiver_name,
+			# }
+            			
+			# # ---------- ATM 版 payload ----------
+			
+			# atm_payload = dict(base_payload)
+			# atm_payload.update({
+				# 'choose_payment': "ATM",
+				# 'payment_method': "ATM",
+				# 'ReturnURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/ecpay_mock_notify/",
+				# 'PaymentInfoUrl': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_info/",
+				# 'OrderResultURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_ok/",
+				# 'action_url': f"{HF_SPACE_ECPAY_MOCK_URL}/gateway/ecpay_gateway_checkout/",
+			# })
+			# atm_payload["check_mac_value"] = generate_check_mac_value(
+				# atm_payload, ECPAY_HASH_KEY, ECPAY_HASH_IV
+			# )
+
+			# # ---------- COD 版 payload ----------
+			# # 取貨付款要通知的是「這筆訂單收件人」的手機,而不是帳號本身的手機
+			# # (兩者可能不同人,例如幫朋友代購),所以優先用 Order.receiver_phone。
+			# # 只有在 receiver_phone 意外是空值時,才 fallback 去 UserProfile 撈帳號手機備用。
+			# try:
+				# receiver_cell_phone = order.receiver_phone or ""
+				# if not receiver_cell_phone:
+					# receiver_cell_phone = user.userprofile.phone or ""
+			# except Exception as e:
+				# # UserProfile 可能不存在(OneToOneField 尚未建立),不影響主流程,
+				# # 只記錄一下方便追蹤,COD 欄位留空即可繼續往下走
+# #				 print(f"⚠️ [purchased_products.build_payload] 取得 userprofile.phone 失敗: " f"{type(e).__name__}: {e}")
+				# logger.exception(f"⚠️ [purchased_products.build_payload] 取得 userprofile.phone 失敗: " f"{type(e).__name__}: {e}")	# 【修改】
+				# receiver_cell_phone = ""
+            
+			# cod_payload = dict(base_payload)
+			# cod_payload.update({
+				# 'choose_payment': "COD",
+				# 'payment_method': "COD",
+				# 'receiver_cell_phone': receiver_cell_phone,
+				# 'ReturnURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/ecpay_mock_notify/",
+				# 'OrderResultURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_ok/",
+				# 'action_url': f"{HF_SPACE_ECPAY_MOCK_URL}/cod_gateway/cod_checkout/",
+			# })
+			# cod_payload["check_mac_value"] = generate_check_mac_value(
+				# cod_payload, ECPAY_HASH_KEY, ECPAY_HASH_IV
+			# )
+
+			# order_list.append({
+				# 'order': order,
+				# 'items': items_with_subtotal,
+				# 'shipping_fee': shipping_fee,
+				# 'total_with_shipping': total_with_shipping,
+				# 'payment_method': payment_method,
+				# # 【新增】ATM 付款資訊來自 Payment model。
+				# # 因為同一個 Order 可以有多筆 Payment，
+				# # 這裡只取該訂單最新的一筆 ATM Payment。
+				# 'payment_bank_code': atm_payment.bank_code if atm_payment else '',
+				# 'payment_v_account': atm_payment.v_account if atm_payment else '',
+				# 'payment_expire_date': atm_payment.expire_date if atm_payment else None,
+				# 'payment_payload_atm': json.dumps(atm_payload, ensure_ascii=False),
+				# 'payment_payload_cod': json.dumps(cod_payload, ensure_ascii=False),
+				# 'backend_url': BACKEND_URL,
+			# })
+		# except KeyError as e:
+			# # 某個訂單缺少必要欄位(例如 amount 是 None),記錄後跳過這筆,
+			# # 不要讓一筆壞資料拖垮整頁清單
+# #			 print(f"❌ [purchased_products.build_payload] 訂單 {order.order_number} 缺少欄位: {e}")
+			# logger.exception(f"❌ [purchased_products.build_payload] 訂單 {order.order_number} 缺少欄位")  # 【修改】
+			# continue
+		# except Exception as e:
+# #			 print(f"❌ [purchased_products.build_payload] 訂單 {order.order_number} 發生錯誤: "
+			# logger.exception(f"❌ [purchased_products.build_payload] 訂單 {order.order_number} 發生錯誤  {type(e).__name__}: {e}")  # 【修改】
+			# continue
+
+	# # 將整理好的訂單列表傳給模板
+	# return render(request, 'purchased_products.html', {'order_list': order_list})
 
 @login_required
 def purchased_products(request):
-	"""
-	顯示使用者已購買的商品清單。
-	每個訂單包含訂單資訊與其商品列表，每個商品加上小計 subtotal。
-	每個 pending 訂單同時準備「ATM」與「COD(超商取貨付款)」兩份已簽章 payload,
-	前端依使用者選擇的付款方式挑一份送出,避免前端臨時改欄位導致簽章對不上。
-	"""
-	try:
-		user = request.user
-		# 取得該使用者所有訂單，依照建立時間排序（最新的在前）
-		orders = Order.objects.filter(user=user).order_by('-created_at')
-		user_id = user.id
-	except Exception as e:
-#		 print(f"❌ [purchased_products.load_orders] {type(e).__name__}: {e}")
-		logger.exception(f"❌ [purchased_products.load_orders] 讀取訂單失敗 {type(e).__name__}: {e}")  # 【修改】
-		# 讀取訂單失敗時,寧可顯示空清單也不要整頁 500,讓使用者至少看得到頁面
-		return render(request, 'purchased_products.html', {'order_list': [], 'load_error': str(e)})
+    """
+    【修改】
 
-	# 建立一個 list，把每個訂單和其商品（含小計）打包
-	order_list = []
+    View 現在只：
 
-	for order in orders:
-		# 取得該訂單的所有 OrderItem
-		payment_method = order.payment_method or ""
-		# 【新增】一個 Order 可以有多筆 Payment。
-		# ATM 的 bank_code / v_account / expire_date 存在 Payment model， 不在 Order model。
-		# 只有當 Order 已確認付款方式為 ATM 時，
-		# 才取得該訂單最新建立的 ATM Payment。
-		atm_payment = None
+        Service
+            ↓
+        render
 
-		if payment_method == 'ATM':
-			atm_payment = (
-				order.payments
-				.filter(payment_method='ATM')
-				.order_by('-created_at')
-				.first()
-			)
-		
-		try:
-			# 【修正】原本這段計算商品明細/運費/merchant_id 的邏輯遺失了,
-			# 導致下面 base_payload 用到的 merchant_id、total_with_shipping、
-			# item_names 等變數會是 NameError,這裡補回來
-			# 使用 select_related('product') 避免 N+1 查詢問題
-			items = order.items.select_related('product')
-			item_names = "#".join([item.product.name for item in items])
+    不直接 ORM。
+    """
 
-			items_with_subtotal = []
-			order_total = 0
+    from commerce_shop.services.order_query_service import (
+        OrderQueryService,
+    )
 
-			for item in items:
-				subtotal = item.price * item.quantity
-				items_with_subtotal.append({'item': item, 'subtotal': subtotal})
-				order_total += subtotal
+    try:
 
-			shipping_fee = 60
-			total_with_shipping = order_total + shipping_fee
-			merchant_id = "shop1234"
+        orders = (
+            OrderQueryService
+            .get_user_orders(
+                request.user
+            )
+        )
 
-			# 兩種付款方式共用的欄位
-			base_payload = {
-				'merchant_id': merchant_id,
-				'merchant_trade_no': order.order_number,
-				'merchant_trade_date': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-				'user_id': user_id,
-				'trade_amt': int(total_with_shipping),
-				'trade_desc': order.remark or "購買商品",
-				'item_name': item_names,
-				'payment_type': "aio",
-				'transaction_id': str(uuid.uuid4()),
-				'status': order.status,
-				# Order model 本身就有 receiver_name(必填欄位),直接用即可,
-				# 不用再去猜 user 身上的欄位
-				'receiver_name': order.receiver_name,
-			}
-            			
-			# ---------- ATM 版 payload ----------
-			
-			atm_payload = dict(base_payload)
-			atm_payload.update({
-				'choose_payment': "ATM",
-				'payment_method': "ATM",
-				'ReturnURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/ecpay_mock_notify/",
-				'PaymentInfoUrl': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_info/",
-				'OrderResultURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_ok/",
-				'action_url': f"{HF_SPACE_ECPAY_MOCK_URL}/gateway/ecpay_gateway_checkout/",
-			})
-			atm_payload["check_mac_value"] = generate_check_mac_value(
-				atm_payload, ECPAY_HASH_KEY, ECPAY_HASH_IV
-			)
+        order_list = []
 
-			# ---------- COD 版 payload ----------
-			# 取貨付款要通知的是「這筆訂單收件人」的手機,而不是帳號本身的手機
-			# (兩者可能不同人,例如幫朋友代購),所以優先用 Order.receiver_phone。
-			# 只有在 receiver_phone 意外是空值時,才 fallback 去 UserProfile 撈帳號手機備用。
-			try:
-				receiver_cell_phone = order.receiver_phone or ""
-				if not receiver_cell_phone:
-					receiver_cell_phone = user.userprofile.phone or ""
-			except Exception as e:
-				# UserProfile 可能不存在(OneToOneField 尚未建立),不影響主流程,
-				# 只記錄一下方便追蹤,COD 欄位留空即可繼續往下走
-#				 print(f"⚠️ [purchased_products.build_payload] 取得 userprofile.phone 失敗: " f"{type(e).__name__}: {e}")
-				logger.exception(f"⚠️ [purchased_products.build_payload] 取得 userprofile.phone 失敗: " f"{type(e).__name__}: {e}")	# 【修改】
-				receiver_cell_phone = ""
-            
-			cod_payload = dict(base_payload)
-			cod_payload.update({
-				'choose_payment': "COD",
-				'payment_method': "COD",
-				'receiver_cell_phone': receiver_cell_phone,
-				'ReturnURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/ecpay_mock_notify/",
-				'OrderResultURL': f"{HF_SPACE_E_COMMERCE_URL}/commerce_shop/payment_ok/",
-				'action_url': f"{HF_SPACE_ECPAY_MOCK_URL}/cod_gateway/cod_checkout/",
-			})
-			cod_payload["check_mac_value"] = generate_check_mac_value(
-				cod_payload, ECPAY_HASH_KEY, ECPAY_HASH_IV
-			)
+        for order in orders:
 
-			order_list.append({
-				'order': order,
-				'items': items_with_subtotal,
-				'shipping_fee': shipping_fee,
-				'total_with_shipping': total_with_shipping,
-				'payment_method': payment_method,
-				# 【新增】ATM 付款資訊來自 Payment model。
-				# 因為同一個 Order 可以有多筆 Payment，
-				# 這裡只取該訂單最新的一筆 ATM Payment。
-				'payment_bank_code': atm_payment.bank_code if atm_payment else '',
-				'payment_v_account': atm_payment.v_account if atm_payment else '',
-				'payment_expire_date': atm_payment.expire_date if atm_payment else None,
-				'payment_payload_atm': json.dumps(atm_payload, ensure_ascii=False),
-				'payment_payload_cod': json.dumps(cod_payload, ensure_ascii=False),
-				'backend_url': BACKEND_URL,
-			})
-		except KeyError as e:
-			# 某個訂單缺少必要欄位(例如 amount 是 None),記錄後跳過這筆,
-			# 不要讓一筆壞資料拖垮整頁清單
-#			 print(f"❌ [purchased_products.build_payload] 訂單 {order.order_number} 缺少欄位: {e}")
-			logger.exception(f"❌ [purchased_products.build_payload] 訂單 {order.order_number} 缺少欄位")  # 【修改】
-			continue
-		except Exception as e:
-#			 print(f"❌ [purchased_products.build_payload] 訂單 {order.order_number} 發生錯誤: "
-			logger.exception(f"❌ [purchased_products.build_payload] 訂單 {order.order_number} 發生錯誤  {type(e).__name__}: {e}")  # 【修改】
-			continue
+            items_with_subtotal = []
 
-	# 將整理好的訂單列表傳給模板
-	return render(request, 'purchased_products.html', {'order_list': order_list})
+            order_total = 0
 
-def _build_auto_submit_html(payload: dict) -> str:
+            for item in order.items.all():
+
+                subtotal = (
+                    item.price
+                    * item.quantity
+                )
+
+                order_total += subtotal
+
+                items_with_subtotal.append(
+                    {
+                        "item": item,
+                        "subtotal": subtotal,
+                    }
+                )
+
+            # ====================================================
+            # 【修改】
+            # 使用 Order 自己保存的 shipping_fee。
+            #
+            # 不要再 View 裡硬寫 60。
+            # ====================================================
+
+            total_with_shipping = (
+                order_total
+                + order.shipping_fee
+            )
+
+            # ====================================================
+            # 【新增】
+            # ATM Payment。
+            #
+            # New Model：
+            #
+            # Order
+            #   ↓
+            # payments
+            #
+            # Payment：
+            #
+            # bank_code
+            # v_account
+            # expire_date
+            # ====================================================
+
+            atm_payment = None
+
+            if order.payment_method == "ATM":
+
+                atm_payments = getattr(
+                    order,
+                    "atm_payments",
+                    [],
+                )
+
+                if atm_payments:
+
+                    atm_payment = (
+                        atm_payments[0]
+                    )
+
+            # 【新增】COD 門市資訊已搬到 Payment，這裡取出給 template 顯示
+            cod_payment = None
+            if order.payment_method == "COD":
+                cod_payment = (
+                    order.payments
+                    .filter(payment_method="COD")
+                    .order_by("-created_at")
+                    .first()
+                )
+
+            # 【新增】訂單頁要顯示「交易狀態」：取該訂單最新一筆 Payment
+            # （ATM / COD 都適用；還沒有 Payment 時為 None）
+            latest_payment = (
+                order.payments
+                .order_by("-created_at")
+                .first()
+            )
+
+            order_list.append(
+                {
+                    "order": order,
+
+                    "items":
+                        items_with_subtotal,
+
+                    "shipping_fee":
+                        order.shipping_fee,
+
+                    "total_with_shipping":
+                        total_with_shipping,
+
+                    "payment_method":
+                        order.payment_method,
+
+                    "latest_payment":
+                        latest_payment,
+                    "cod_payment":
+                        cod_payment,
+                    "payment_bank_code":
+                        (
+                            atm_payment.bank_code
+                            if atm_payment
+                            else ""
+                        ),
+
+                    "payment_v_account":
+                        (
+                            atm_payment.v_account
+                            if atm_payment
+                            else ""
+                        ),
+
+                    "payment_expire_date":
+                        (
+                            atm_payment.expire_date
+                            if atm_payment
+                            else None
+                        ),
+                }
+            )
+
+        return render(
+            request,
+            "purchased_products.html",
+            {
+                "order_list":
+                    order_list,
+
+                "backend_url":
+                    BACKEND_URL,
+            },
+        )
+
+    except Exception as exc:
+
+        logger.exception(
+            "[purchased_products] "
+            "顯示訂單失敗"
+        )
+
+        return render(
+            request,
+            "purchased_products.html",
+            {
+                "order_list": [],
+
+                "load_error":
+                    "讀取訂單失敗，請稍後再試。",
+            },
+        )
+
+def _build_auto_submit_html(payload: dict, action_url: str) -> str:
     """
     【重構】把「用 payload dict 組出自動送出的 HTML form」這段邏輯,
     從 ready_form 抽出來獨立成一個函式,讓 ready_form 和 enter_receiver_info
@@ -1170,7 +2603,7 @@ def _build_auto_submit_html(payload: dict) -> str:
         <h2>正在導向綠界付款...</h2>
         <form id="ecpayForm"
               method="post"
-              action="{payload['action_url']}">
+              action="{action_url}">
     """
     for key, value in payload.items():
         html += f"""
@@ -1207,6 +2640,207 @@ def ready_form(request):
 
     html = _build_auto_submit_html(payment_payload)
     return HttpResponse(html)
+
+# ============================================================
+# 【新增】
+# ECPay Checkout Redirect
+# ============================================================
+
+@login_required
+@require_POST
+def ecpay_checkout_redirect(request):
+    """
+    【新增】
+
+    接收 enter_receiver_info.html 的 Order Number，
+    在 Store 後端準備 ECPay ATM Checkout payload。
+
+    Flow：
+
+        enter_receiver_info.html
+                ↓
+        POST /api/checkout
+                ↓
+        OrderService
+                ↓
+        更新 Order
+                ↓
+        JavaScript POST order_number
+                ↓
+        ecpay_checkout_redirect
+                ↓
+        OrderService.prepare_ecpay_atm_checkout()
+                ↓
+        CheckMacValue
+                ↓
+        _build_auto_submit_html()
+                ↓
+        Browser
+                ↓
+        Ecpay Mock
+
+    View 不直接操作 Order ORM。
+
+    View 不呼叫：
+        ❌ PaymentService
+        ❌ ECPayGateway
+        ❌ HTTPX
+        ❌ Bank Mock
+    """
+
+    # ========================================================
+    # 【新增】
+    # 取得 Order Number
+    # ========================================================
+
+    order_number = (
+        request.POST
+        .get(
+            "order_number",
+            "",
+        )
+        .strip()
+    )
+
+    if not order_number:
+
+        return JsonResponse(
+            {
+                "success": False,
+                "message": (
+                    "缺少 order_number"
+                ),
+            },
+            status=400,
+        )
+
+    try:
+
+        # ====================================================
+        # 【新增】
+        # Order 查詢 / Business Validation
+        # 交給 OrderService。
+        # ====================================================
+
+        service = (
+            OrderService()
+        )
+
+        # payment_payload = (
+            # service
+            # .prepare_ecpay_atm_checkout(
+                # user=request.user,
+                # order_number=order_number,
+            # )
+        # )
+        
+        # action_url = (
+            # f"{settings.HF_SPACE_ECPAY_MOCK_URL}"
+            # "/gateway/ecpay_gateway_checkout/"
+        # )
+
+        # 【修改】依 Order.payment_method 分流 ATM / COD
+        # 舊：service.prepare_ecpay_atm_checkout(...)
+        payment_payload = (
+            service
+            .prepare_ecpay_checkout(
+                user=request.user,
+                order_number=order_number,
+            )
+        )
+
+        # 【修改】action_url 改取 payload 內的值（ATM / COD 各自指向不同窗口）
+        # 舊：f"{settings.HF_SPACE_ECPAY_MOCK_URL}/gateway/ecpay_gateway_checkout/"
+        action_url = payment_payload["action_url"]
+
+        # ====================================================
+        # 【新增】
+        # CheckMacValue
+        #
+        # 使用你確認的 util/ChkMacVal.py：
+        #
+        # generate_check_mac_value(
+        #     dict,
+        #     settings.ECPAY_HASH_KEY,
+        #     settings.ECPAY_HASH_IV,
+        # )
+        #
+        # 注意：
+        #
+        # action_url 目前也在 payload 裡，
+        # 因為 _build_auto_submit_html()
+        # 是直接從 payload['action_url']
+        # 取得 POST 目的地。
+        # ====================================================
+
+        payment_payload[
+            "CheckMacValue"
+        ] = (
+            generate_check_mac_value(
+                payment_payload,
+                settings.ECPAY_HASH_KEY,
+                settings.ECPAY_HASH_IV,
+            )
+        )
+
+        logger.info(
+            "[ecpay_checkout_redirect] "
+            "Order=%s 準備 POST 到 Ecpay Mock",
+            order_number,
+        )
+
+        # ====================================================
+        # 【新增】
+        # 使用既有共用 HTML builder。
+        # ====================================================
+
+        html = (
+            _build_auto_submit_html(
+                payment_payload,
+                action_url
+            )
+        )
+
+        return HttpResponse(
+            html,
+            content_type=(
+                "text/html; charset=utf-8"
+            ),
+        )
+
+    except ValueError as exc:
+
+        logger.warning(
+            "[ecpay_checkout_redirect] "
+            "業務驗證失敗：%s",
+            exc,
+        )
+
+        return JsonResponse(
+            {
+                "success": False,
+                "message": str(exc),
+            },
+            status=400,
+        )
+
+    except Exception as exc:
+
+        logger.exception(
+            "[ecpay_checkout_redirect] "
+            "建立 ECPay Checkout 失敗"
+        )
+
+        return JsonResponse(
+            {
+                "success": False,
+                "message": (
+                    "建立 ECPay 付款頁面失敗。"
+                ),
+                "error": str(exc),
+            },
+            status=500,
+        )
 
 def ready_form1(request):
 	# 🔑 打包必要欄位 dict
@@ -1265,18 +2899,37 @@ def delete_order_item(request, order_item_id):
 	order = item.order	# 取得對應訂單
 
 	# ❗如果訂單已付款或已出貨 → 不允許刪
-	if order.status in ['shipped', 'paid']:
-		messages.error(request, "已付款或已出貨的訂單商品無法刪除。")
+	# 【修改】加入 expired：逾期時庫存已釋放，不可再刪（會重複加回庫存）
+	# 【修改】加上「已建立付款資訊（Payment 存在）且尚未取消」也不可刪：ATM 虛擬帳號 / COD 超商單的金額已固定在
+	# ecpay_mock / Bank，只改 E_commerce 會三邊不一致，須先「取消訂單」（已取消的訂單下游已同步，可以刪）
+	if order.status in ['shipped', 'paid', 'expired'] or (order.status != 'cancelled' and order.payments.exists()):
+		messages.error(request, "已付款、已出貨或已逾期的訂單商品無法刪除；已建立付款資訊的訂單請先按「取消訂單」。")	# 【修改】訊息補上新情境
 		return redirect('purchased_products')
 
 	# 🔥 POST 才真正刪除
 	if request.method == 'POST':
 
+		# 【新增】刪的是最後一個品項 → 整張訂單會被刪，先通知 ecpay_mock / Bank 刪除已取消的紀錄；
+		# 失敗就保留商店訂單並顯示原因（未取消的訂單上面已擋，這裡只會遇到已取消或無付款資訊的訂單）
+		if order.items.count() == 1:
+			try:
+				if order.status == 'cancelled':
+					PaymentService().delete_downstream_records(order)
+			except Exception as ex:
+				logger.exception("刪除最後品項前同步刪除付款紀錄失敗：order_id=%s", order.id)
+				messages.error(request, f"刪除失敗，無法同步刪除付款資訊：{ex}")
+				return redirect('purchased_products')
+
 		with transaction.atomic():
 
 			# 🔥 1. 先恢復庫存（只針對這一個商品）
 			product = item.product
-			product.stock += item.quantity
+			# 【修改】已取消訂單的庫存在取消時已釋放，不可再加回（否則庫存會變多）；
+			# 其他訂單除了加回 stock，也要扣 reserved_stock 並把該商品的預留標為 released（原本只加 stock，reserved_stock 會越積越高）
+			if order.status != 'cancelled':
+				product.stock += item.quantity
+				product.reserved_stock = max(product.reserved_stock - item.quantity, 0)
+				order.inventory_reservations.filter(product=product, status='reserved').update(status='released')
 			product.save()
 
 			# 🔥 2. 刪除這一個 OrderItem（不是整張訂單）
@@ -1285,6 +2938,11 @@ def delete_order_item(request, order_item_id):
 			# 🔥 3. 如果這張訂單已經沒有任何商品 → 可選：刪訂單
 			if not order.items.exists():
 				order.delete()
+			else:
+				# 【新增】還有其他商品 → 重算 total_amount（品項小計 + 運費）。
+				# 原本不重算，之後 ATM / COD 結帳送給 ecpay_mock 的 trade_amt 仍是舊金額，會多收已刪除商品的錢
+				order.total_amount = sum(i.price * i.quantity for i in order.items.all()) + order.shipping_fee
+				order.save(update_fields=['total_amount', 'updated_at'])
 
 		messages.success(request, "商品已成功從訂單移除")
 		return redirect('purchased_products')
@@ -1293,36 +2951,95 @@ def delete_order_item(request, order_item_id):
 	return render(request, 'confirm_delete_item.html', {
 		'item': item
 	})
-	
-	
+
 @login_required
 def delete_order(request, order_id):
-	"""
-	刪除使用者自己的訂單流程：
-	1. GET：顯示確認刪除頁面
-	2. POST：確定刪除訂單，回復商品庫存
-	"""
 	order = get_object_or_404(Order, id=order_id, user=request.user)
 
-	# 無法刪除已付款或已出貨訂單
-	if order.status in ['shipped', 'paid']:
-		messages.error(request, "無法刪除已出貨或已付款的訂單。")
+	# 只有待付款的訂單可以刪除
+	if order.status not in ['pending_payment']:
+		messages.error(request, "只有待付款的訂單可以刪除。")
 		return redirect('purchased_products')
 
 	if request.method == 'POST':
-		# 開始交易，確保庫存更新和訂單刪除一致
+		# 【新增】先走取消流程：通知 ecpay_mock → Bank（有 ATM 帳號 / COD 單才會真的呼叫），成功才往下刪；
+		# 失敗就保留訂單並顯示原因，避免下游殘留 atm_created / cod_created。取消時庫存已釋放，下面的迴圈不會重複加回
+		try:
+			PaymentService().cancel_order(order)
+			# 【新增】取消成功後，再通知 ecpay_mock / Bank 把已取消的紀錄刪除（下游先刪，成功才刪商店訂單）
+			PaymentService().delete_downstream_records(order)
+		except Exception as ex:
+			logger.exception("刪除訂單前同步取消失敗：order_id=%s", order_id)
+			messages.error(request, f"刪除失敗，無法同步取消付款資訊：{ex}")
+			return redirect('purchased_products')
+
 		with transaction.atomic():
-			for item in order.items.select_related('product'):
-				product = item.product
-				product.stock += item.quantity
+			for res in order.inventory_reservations.select_related('product').filter(status='reserved'):
+				product = res.product
+				product.stock += res.quantity
+				product.reserved_stock -= res.quantity
 				product.save()
+			order_number = order.order_number
 			order.delete()
-		messages.success(request, f"訂單 #{order.order_number} 已刪除，商品庫存已恢復。")
+		messages.success(request, f"訂單 #{order_number} 已刪除,商品庫存已恢復。")
 		return redirect('purchased_products')
 
-	# GET：顯示確認刪除頁面
-	return render(request, 'confirm_delete_order.html', {'order': order})
+	return render(request, 'confirm_delete_order.html', {'order': order})	
+	
+# @login_required
+# def delete_order(request, order_id):
+	# """
+	# 刪除使用者自己的訂單流程：
+	# 1. GET：顯示確認刪除頁面
+	# 2. POST：確定刪除訂單，回復商品庫存
+	# """
+	# order = get_object_or_404(Order, id=order_id, user=request.user)
 
+	# # 無法刪除已付款或已出貨訂單
+	# if order.status in ['shipped', 'paid']:
+		# messages.error(request, "無法刪除已出貨或已付款的訂單。")
+		# return redirect('purchased_products')
+
+	# if request.method == 'POST':
+		# # 開始交易，確保庫存更新和訂單刪除一致
+		# with transaction.atomic():
+			# for item in order.items.select_related('product'):
+				# product = item.product
+				# product.stock += item.quantity
+				# product.save()
+			# order.delete()
+		# messages.success(request, f"訂單 #{order.order_number} 已刪除，商品庫存已恢復。")
+		# return redirect('purchased_products')
+
+	# # GET：顯示確認刪除頁面
+	# return render(request, 'confirm_delete_order.html', {'order': order})
+
+
+# 【新增】取消訂單（待付款 / 付款失敗的 ATM 訂單）
+# 只負責收 request / 導頁 / 顯示訊息；流程在 PaymentService.cancel_order
+@login_required
+def cancel_order(request, order_id):
+	order = get_object_or_404(Order, id=order_id, user=request.user)
+
+	# 只接受 POST，避免 GET 連結誤觸取消
+	if request.method != 'POST':
+		return redirect('purchased_products')
+
+	try:
+		PaymentService().cancel_order(order)
+		# 【新增】取消成功（庫存已釋放）後，緊接著通知 ecpay_mock / Bank 刪除已取消的紀錄（下游先刪）。
+		# 【修改】商店訂單不刪，保留為「已取消」歷史紀錄；若下游刪除失敗，訂單同樣保留，之後刪除訂單時會再重試
+		PaymentService().delete_downstream_records(order)
+	except ValueError as ex:
+		messages.error(request, str(ex))
+	except Exception as ex:
+		logger.exception("取消訂單失敗：order_id=%s", order_id)
+		messages.error(request, f"取消訂單失敗：{ex}")
+	else:
+		# 【修改】訊息補上「ecpay_mock / Bank 紀錄已清除」
+		messages.success(request, f"訂單 #{order.order_number} 已取消，ecpay_mock / Bank 紀錄已清除，商品庫存已恢復。")
+
+	return redirect('purchased_products')
 
 @login_required
 def update_cart_item(request, product_id):
@@ -1410,6 +3127,10 @@ def ecpay_mock_notify(request):
 			order = Order.objects.get(order_number=merchant_trade_no)
 		except Order.DoesNotExist:
 			return HttpResponse("0|Order Not Found")
+
+		# 【新增】逾期訂單不可被通知改狀態（只有 COD 模擬頁可改）
+		if order.status == "expired":
+			return HttpResponse("0|Order Expired")
 
 		# 更新訂單狀態
 		if rtn_code == "1":	 # 成功
@@ -1509,6 +3230,9 @@ def payment_ok(request):
 		# 找到商城的訂單
 		order = Order.objects.get(order_number=merchant_trade_no)
 #		  orders = Order.objects.filter(order_number=merchant_trade_no).order_by("-created_at")
+		# 【新增】逾期訂單不可被通知改成已付款（只有 COD 模擬頁可改）
+		if order.status == "expired":
+			return HttpResponse("0|Order Expired", status=400)
 		order.status = "paid"
 		order.save()
 	except Order.DoesNotExist:

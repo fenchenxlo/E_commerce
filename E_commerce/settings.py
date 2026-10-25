@@ -15,10 +15,14 @@ from .settings_email import *
 from django.utils.csp import CSP
 import os
 #import django
-
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+ENV_FILE = BASE_DIR / ".env"
+
+load_dotenv(ENV_FILE)
 
 #print(f"Django version: {django.__version__}")
 
@@ -51,10 +55,14 @@ HF_SPACE_E_COMMERCE_URL = os.environ.get('HF_SPACE_E_COMMERCE_URL', 'http://127.
 HF_SPACE_ECPAY_MOCK_URL = os.environ.get('HF_SPACE_ECPAY_MOCK_URL', 'http://127.0.0.1:8001')
 HF_SPACE_BANK_SITE_URL = os.environ.get('HF_SPACE_BANK_SITE_URL', 'http://127.0.0.1:8002')
 
+INVENTORY_RESERVATION_MINUTES = 30
+SESSION_COOKIE_NAME = "ecommerce_sessionid"
     
 ALLOWED_HOSTS = [
 	'monzid1-e-commerce.hf.space',
 	'proxy.spaces.internal.huggingface.tech',
+	'127.0.0.1',
+	'localhost',
 ]
 
 # 關鍵: 允許Hugging Face 的Iframe 嵌入你的網站,否則畫面會空白
@@ -112,8 +120,10 @@ ACCOUNT_SIGNUP_FIELDS = ['email*', 'username*', 'password1*', 'password2*']
 
 # 綠界測試環境
 ECPAY_MERCHANT_ID = "3002607"
-ECPAY_HASH_KEY = os.environ.get('ECPAY_HASH_KEY', '')
-ECPAY_HASH_IV = os.environ.get('ECPAY_HASH_IV', '')
+ECPAY_HASH_KEY = os.getenv('ECPAY_HASH_KEY', '')
+ECPAY_HASH_IV = os.getenv('ECPAY_HASH_IV', '')
+#ECPAY_HASH_KEY = os.environ.get('ECPAY_HASH_KEY', '')
+#ECPAY_HASH_IV = os.environ.get('ECPAY_HASH_IV', '')
 
 
 MIDDLEWARE = [
@@ -171,12 +181,17 @@ WSGI_APPLICATION = 'E_commerce.wsgi.application'
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 DB_PATH = os.environ.get('SQLITE_DB_PATH', str(BASE_DIR / 'db.sqlite3'))
+#OLD_DB_PATH = os.environ.get('SQLITE_DB_PATH', str(BASE_DIR / 'db_old.sqlite3'))
 
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': DB_PATH,
     }
+    # 'old_db': {
+        # 'ENGINE': 'django.db.backends.sqlite3',
+        # 'NAME': OLD_DB_PATH
+    # }
 }
 
 

@@ -160,12 +160,17 @@ class PaymentAdmin(admin.ModelAdmin):
     list_display = (
         'id',
         'order',
-        'transaction_id',
+        'provider',
+        'payment_number',
+        'provider_transaction_id',
         'amount',
         'status',
         'payment_method',
         'paid_at',
-        'created_at'
+        'created_at',
+        'bank_code',
+        'v_account',
+        'expire_date',
     )
 
     list_filter = (

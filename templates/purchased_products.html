@@ -24,6 +24,7 @@
 		.status-atm_confirmed {color: green}
         .status-shipped { color: green; }
         .status-cancelled { color: red; }
+        .status-expired { color: gray; }   /* 【新增】逾期未付款 */
     </style>
 </head>
 <body>
@@ -55,26 +56,54 @@
             <h2>
                 訂單編號: {{ order_dict.order.order_number }} | 狀態: 
                 <span class="
-                    {% if order_dict.order.status == 'pending' %}status-pending
+                    {% if order_dict.order.status == 'pending_payment' %}status-pending_payment
                     {% elif order_dict.order.status == 'paid' %}status-paid
                     {% elif order_dict.order.status == 'failed' %}status-failed
 					{% elif order_dict.order.status == 'cod_confirmed' %}status-cod_confirmed
 					{% elif order_dict.order.status == 'atm_confirmed' %}status-atm_confirmed
                     {% elif order_dict.order.status == 'shipped' %}status-shipped
                     {% elif order_dict.order.status == 'cancelled' %}status-cancelled
+                    {% elif order_dict.order.status == 'expired' %}status-expired   {# 【新增】逾期 #}
                     {% endif %}
                 ">
-                    {% if order_dict.order.status == 'pending' %}待處理
+                    {% if order_dict.order.status == 'pending_payment' %}待處理
                     {% elif order_dict.order.status == 'paid' %}已付款
                     {% elif order_dict.order.status == 'failed' %}付款失敗
 					{% elif order_dict.order.status == 'cod_confirmed' %}超商取貨待付款
 					{% elif order_dict.order.status == 'atm_confirmed' %}ATM待付款
-                    {% elif order_dict.order.status == 'shipped' %}已出貨
+                    {# 【修改】shipped 依付款方式顯示：COD（超商取貨付款）= 配送中,待取貨付款；其他維持「已出貨」 #}
+                    {% elif order_dict.order.status == 'shipped' %}{% if order_dict.payment_method == 'COD' %}配送中,待取貨付款{% else %}已出貨{% endif %}
                     {% elif order_dict.order.status == 'cancelled' %}已取消
+                    {% elif order_dict.order.status == 'expired' %}已逾期   {# 【新增】ATM/COD 逾期未付款 #}
                     {% endif %}
                 </span>
             </h2>
             <p>訂單總金額: {{ order_dict.order.total_amount }} 元</p>
+            {# 【新增】交易狀態：顯示該訂單最新一筆 Payment.status（與上方「訂單狀態」是不同的欄位） #}
+            <p>交易狀態：
+                {% if not order_dict.latest_payment %}尚未建立交易
+                {% elif order_dict.latest_payment.status == 'pending' %}待付款
+                {% elif order_dict.latest_payment.status == 'success' %}交易成功（已收到款項）
+                {% elif order_dict.latest_payment.status == 'failed' %}交易失敗（未收到款項）
+                {% elif order_dict.latest_payment.status == 'expired' %}交易逾期（逾期未付款）
+                {% elif order_dict.latest_payment.status == 'cancelled' %}交易已取消
+                {% else %}{{ order_dict.latest_payment.status }}
+                {% endif %}
+            </p>
+            {# 【修改】取消訂單按鈕：待處理 / 付款失敗才顯示（ATM、COD 皆可）；COD 配送中(shipped)、已付款(paid)、逾期(expired) 不在條件內，不會顯示 #}
+            {% if order_dict.order.status == 'pending_payment' or order_dict.order.status == 'failed' %}
+                <form action="{% url 'cancel_order' order_dict.order.id %}" method="post" style="margin:8px 0;"
+                      onsubmit="return confirm('確定要取消訂單 #{{ order_dict.order.order_number }} 嗎？');">
+                    {% csrf_token %}
+                    <button type="submit" style="padding:8px 16px; background:#c0392b; color:#fff; border:none; border-radius:6px; cursor:pointer;">
+                        取消訂單
+                    </button>
+                </form>
+            {% endif %}
+            {% if order_dict.order.status == 'expired' %}
+                {# 【新增】逾期提示：讓買家明確知道此訂單已失效 #}
+                <p style="color:gray;">此訂單已逾期未付款，訂單已失效，請重新下單。</p>
+            {% endif %}
 
             <table>
                 <thead>
@@ -95,12 +124,19 @@
                         <td>{{ item.item.price }} 元</td>
                         <td>{{ item.item.quantity }}</td>
                         <td>{{ item.subtotal }} 元</td>
-                        <td>{% if order_dict.order.status == 'pending' or order_dict.order.status == 'cancelled' or order_dict.order.status == 'failed'%}
+                        {# 【修改】已取消改顯示灰色「已取消」（見下方 elif）；其餘與 delete_order_item 的規則一致：「待處理 / 付款失敗且還沒有付款資訊」才給刪除按鈕（Django 的 and 優先於 or，不需括號） #}
+                        <td>{% if order_dict.order.status == 'pending_payment' and not order_dict.latest_payment or order_dict.order.status == 'failed' and not order_dict.latest_payment %}
                             <form action="{% url 'delete_order_item' item.item.id %}" method="get" style="display:inline;">
                                 <button type="submit">
                                     刪除訂單
                                 </button>
                             </form>
+                        {# 【新增】已有付款資訊（ATM 帳號 / COD 單）的待處理 / 付款失敗訂單：不給刪除，提示先取消 #}
+                        {# 【新增】已取消訂單：不再顯示「刪除訂單」按鈕，改顯示灰色「已取消」（訂單保留為歷史紀錄） #}
+                        {% elif order_dict.order.status == 'cancelled' %}
+                            <span style="color:gray;">已取消</span>
+                        {% elif order_dict.order.status == 'pending_payment' or order_dict.order.status == 'failed' %}
+                            <span style="color:gray;">請先取消訂單</span>
                         {% endif %}
                         </td>
                     </tr>
@@ -109,7 +145,7 @@
             </table>
             <!-- 訂單操作區 -->
             <div style="margin-bottom: 40px;">
-                {% if order_dict.order.status == 'pending' or order_dict.order.status == 'failed' or order_dict.order.status == 'cod_confirmed' or order_dict.order.status == 'atm_confirmed'%}                    
+                {% if order_dict.order.status == 'pending_payment' or order_dict.order.status == 'failed' or order_dict.order.status == 'cod_confirmed' or order_dict.order.status == 'atm_confirmed'%}                    
                     <p>運費：{{ order_dict.shipping_fee }} 元</p>
                     <p>訂單總額（含運費）：{{ order_dict.total_with_shipping|floatformat:2 }} 元</p>
 					
@@ -118,7 +154,8 @@
 							 改成顯示目前確認的付款資訊,避免使用者重複選、搞混狀態 -->
 						<div style="border:1px solid #ccc; padding:12px; border-radius:8px; background:#f8f8f8;">							
 							{% if order_dict.payment_method == 'COD' or order_dict.payment_method == 'ATM' %}
-								{% if order_dict.order.status == 'failed' or order_dict.order.status == 'pending'%}
+								{# 【修改】加上 != 'expired'，逾期訂單不顯示「前往填寫收件資訊並付款」連結 #}
+								{% if order_dict.order.status == 'failed' or order_dict.order.status == 'pending_payment'%}
 									<a href="{% url 'enter_receiver_info' order_dict.order.order_number %}"
 									   style="display:inline-block; text-decoration:none; padding:10px 20px;
 											  background:#2b7de9; color:#fff; border-radius:6px;">
@@ -129,14 +166,16 @@
 							
 							{% if order_dict.payment_method == 'COD'%}
 								<p>付款方式：<b>超商取貨付款(貨到付現)</b></p>
-								<p>取貨門市：{{ order_dict.order.cvs_store_name }}</p>
-								<p>門市地址：{{ order_dict.order.cvs_store_address }}</p>
-								<p style="color:#888;">目前狀態：待出貨,貨到超商時付現</p>
+								{# 【修改】門市資訊改從 Payment 取（原本是 order.cvs_store_name） #}
+								<p>取貨門市：{{ order_dict.cod_payment.cvs_store_name }}</p>
+								<p>門市地址：{{ order_dict.cod_payment.cvs_store_address }}</p>
+								{# 【修改】原本固定顯示「待出貨」；已送達超商(shipped)時改顯示「配送中,待取貨付款」 #}
+								<p style="color:#888;">目前狀態：{% if order_dict.order.status == 'shipped' %}配送中,待取貨付款{% else %}待出貨,貨到超商時付現{% endif %}</p>
 								
 							{% elif order_dict.payment_method == 'ATM' %}
 								<!-- 【修改】ATM 付款資訊存放於 Payment model，
 									 不在 Order model。
-									 purchased_products view 會取得目前 pending 的 ATM Payment，
+									 purchased_products view 會取得目前 pending_payment 的 ATM Payment，
 									 並將銀行代碼、虛擬銀行帳戶、繳費期限傳給模板。 -->
 								<p>付款方式：<b>ATM 轉帳</b></p>
 								<p>銀行代碼：<b>{{ order_dict.payment_bank_code }}</b></p>
@@ -239,6 +278,7 @@
                     <span style="color: green;">
                         已付款
                     </span>
+                {# 【刪除】原逾期專用顯示區塊已移除，改由標題「已逾期」與上方提示顯示 #}
                 {% endif %}
                 
 
@@ -248,7 +288,7 @@
         <!-- 回商城 -->
         <button
             class="btn"
-            onclick="location.href='{{ order_list.0.backend_url}}'">
+            onclick="location.href='{{backend_url}}'">
     
             回首頁
     
@@ -258,7 +298,7 @@
         <!-- 回商城 -->
         <button
             class="btn"
-            onclick="location.href='{{ order_list.0.backend_url}}'">
+            onclick="location.href='{{backend_url}}'">
     
             回首頁
     

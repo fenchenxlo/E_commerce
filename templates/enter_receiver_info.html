@@ -1,83 +1,991 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
-<head>
-    <meta charset="UTF-8">
-    <title>填寫收件資訊</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 40px; }
-        .container { max-width: 500px; margin: auto; }
-        label { display: block; margin-bottom: 12px; }
-        input[type="text"], input[type="tel"] {
-            width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box;
-        }
-        .error { color: red; margin-bottom: 12px; }
-        .btn {
-            margin-top: 16px; padding: 10px 24px; font-size: 16px;
-            cursor: pointer; background: #2b7de9; color: #fff; border: none; border-radius: 6px;
-        }
-        .pay-method { margin: 16px 0; }
-    </style>
-</head>
-<body>
-<div class="container">
-    <h1>填寫收件資訊</h1>
-    <p>訂單編號：{{ order.order_number }}</p>
 
-    {% if error %}
-        <p class="error">{{ error }}</p>
+<head>
+
+    <meta charset="UTF-8">
+
+    <title>填寫收件資訊</title>
+
+
+    <style>
+
+        body {
+            font-family: Arial, sans-serif;
+        }
+
+
+        .container {
+            max-width: 600px;
+            margin: 40px auto;
+        }
+
+
+        label {
+            display: block;
+            margin-bottom: 15px;
+        }
+
+
+        input {
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+            box-sizing: border-box;
+        }
+
+
+        .pay-method {
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+
+
+        .pay-method label {
+            display: inline;
+        }
+
+
+        .pay-method input {
+            width: auto;
+        }
+
+
+        .btn {
+            padding: 10px 20px;
+            cursor: pointer;
+        }
+
+
+        .error {
+            color: red;
+            margin-bottom: 15px;
+        }
+
+
+        .success {
+            color: green;
+            margin-bottom: 15px;
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+<div class="container">
+
+
+    <h1>填寫收件資訊</h1>
+
+
+    <!-- ========================================================
+         【修改】
+
+         現在這一頁就是：
+
+             /enter_receiver_info/<order_number>/
+
+         order_number 已經由 URL 傳進 View，
+         View 再把 Order 傳進 Template。
+
+         所以這裡直接顯示既有 Order 編號。
+
+         ======================================================== -->
+
+    {% if order %}
+
+        <p>
+            訂單編號：
+            <strong>{{ order.order_number }}</strong>
+        </p>
+
     {% endif %}
 
-    <!-- 表單送出後由 enter_receiver_info view 的 POST 分支處理,
-         驗證失敗時會帶著 posted_name/posted_phone/posted_address + error 重新 render 這一頁,
-         避免使用者重新輸入已經填過的內容 -->
-    <form method="post">
+
+
+    <!-- ========================================================
+         【新增】
+
+         把既有 Order Number 放進 HTML。
+
+         JavaScript 後面會從這裡取得 order_number。
+
+         注意：
+
+         order_number 是 Store 已建立好的 Order 編號，
+         不是前端自行產生。
+
+         ======================================================== -->
+
+    <input
+        type="hidden"
+        id="order_number"
+        value="{{ order.order_number }}"
+    >
+
+    <!-- 【新增】前端攔截用：訂單狀態（逾期時 JS 與按鈕都會擋下） -->
+    <input type="hidden" id="order_status" value="{{ order.status }}">
+
+    {% if order.status == 'expired' %}
+        <!-- 【新增】逾期提示（後端已導回，此為前端雙重保險） -->
+        <p class="error">此訂單已逾期未付款，無法再付款，請重新下單。</p>
+    {% endif %}
+
+
+
+    <!-- ========================================================
+         API 錯誤訊息
+         ======================================================== -->
+
+    <p
+        id="error-message"
+        class="error"
+        style="display: none;"
+    ></p>
+
+
+
+    <!-- ========================================================
+         Checkout Form
+         ========================================================
+
+         【修改】
+
+         現在不是建立 Order。
+
+         這一頁負責：
+
+             1. 使用者填寫收件資訊
+             2. 使用者選付款方式
+             3. POST /api/checkout
+
+         ======================================================== -->
+
+    <form id="checkout-form">
+
+
         {% csrf_token %}
+
+
+
+        <!-- ====================================================
+             收件人姓名
+             ==================================================== -->
+
         <label>
+
             收件人姓名
-            <input type="text" name="receiver_name"
-                   value="{{ posted_name|default:order.receiver_name }}"
-                   required maxlength="100">
+
+            <input
+                type="text"
+                id="receiver_name"
+                name="receiver_name"
+                value="{{ posted_name|default:order.receiver_name }}"
+                required
+                maxlength="100"
+            >
+
         </label>
+
+
+
+        <!-- ====================================================
+             收件人手機
+             ==================================================== -->
+
         <label>
+
             收件人手機
-            <input type="tel" name="receiver_phone"
-                   value="{{ posted_phone|default:order.receiver_phone }}"
-                   required maxlength="20">
+
+            <input
+                type="tel"
+                id="receiver_phone"
+                name="receiver_phone"
+                value="{{ posted_phone|default:order.receiver_phone }}"
+                required
+                maxlength="20"
+            >
+
         </label>
+
+
+
+        <!-- ====================================================
+             收件地址
+             ==================================================== -->
+
         <label>
+
             收件地址
-            <input type="text" name="receiver_address"
-                   value="{{ posted_address|default:order.receiver_address }}"
-                   required maxlength="200">
+
+            <input
+                type="text"
+                id="receiver_address"
+                name="receiver_address"
+                value="{{ posted_address|default:order.receiver_address }}"
+                required
+                maxlength="500"
+            >
+
         </label>
+
+
+
+        <!-- ====================================================
+             付款方式
+             ==================================================== -->
 
         <div class="pay-method">
-            <label style="display:inline;">
-                <input type="radio" name="pay_method" value="ATM" checked> ATM 轉帳
-            </label>
-            <label style="display:inline; margin-left:16px;">
-                <input type="radio" name="pay_method" value="COD"> 超商取貨付款
-            </label>
-        </div>
-        <script>
-            /*function goBack() {
-                if (history.length >= 2) {
-                       history.go(-2);
-                } else {
-                       history.go(-1);
-                }
-            }*/
-		</script>
 
-        <button type="submit" class="btn">確認並前往付款</button>
-		<!-- 回商店訂單頁修改付款方式 -->
-		<a href="{{ HF_SPACE_E_COMMERCE_URL }}/commerce_shop/purchased_products/">
-			返回商品頁
-		</a>
-		<!-- <button type="button" onclick="window.location.href='{{ HF_SPACE_E_COMMERCE_URL }}/commerce_shop/purchased_products/'">返回商城</button> -->
-		<!-- <button type="button" onclick="goBack()"> 返回 </button> -->
-		<!-- <button type="button" onclick="history.back()">返回</button> -->
+
+            <label>
+
+                <input
+                    type="radio"
+                    name="payment_method"
+                    value="ATM"
+                    checked
+                >
+
+                ATM 轉帳
+
+            </label>
+
+
+
+            <label style="margin-left:16px;">
+
+                <input
+                    type="radio"
+                    name="payment_method"
+                    value="COD"
+                >
+
+                超商取貨付款
+
+            </label>
+
+
+        </div>
+
+
+
+        <!-- ====================================================
+             訂單備註
+             ==================================================== -->
+
+        <label>
+
+            訂單備註
+
+            <input
+                type="text"
+                id="remark"
+                name="remark"
+                maxlength="500"
+            >
+
+        </label>
+
+
+
+        <!-- ====================================================
+             Submit
+             ==================================================== -->
+
+        <button
+            type="submit"
+            class="btn"
+            id="checkout-button"
+            {% if order.status == 'expired' %}disabled{% endif %}
+        >
+            確認並前往付款
+        </button>
+
+
+
+        <!-- ====================================================
+             返回商品頁
+             ==================================================== -->
+
+        <a
+            href="{{ HF_SPACE_E_COMMERCE_URL }}/commerce_shop/purchased_products/"
+        >
+            返回商品頁
+        </a>
+
+
     </form>
+
 </div>
+
+
+
+<script>
+
+/*
+====================================================================
+Checkout JavaScript
+====================================================================
+
+【修改】
+
+現在真正流程：
+
+    purchased_products.html
+            ↓
+    /enter_receiver_info/<order_number>/
+            ↓
+    enter_receiver_info.html
+            ↓
+    使用者填寫資料
+            ↓
+    POST /api/checkout
+            ↓
+    CheckoutSchema
+            ↓
+    OrderService.process_existing_order_checkout()
+            ↓
+    PaymentService
+            ↓
+    ECPayGateway
+            ↓
+    ECPayMockAdapter
+            ↓
+    ECPay Mock
+            ↓
+    Bank Mock
+
+====================================================================
+*/
+
+
+// =================================================================
+// 取得 HTML 元素
+// =================================================================
+
+const checkoutForm = document.getElementById(
+    "checkout-form"
+);
+
+
+const checkoutButton = document.getElementById(
+    "checkout-button"
+);
+
+
+const errorMessage = document.getElementById(
+    "error-message"
+);
+
+
+// =================================================================
+// 【新增】
+// 取得既有 Order Number
+// =================================================================
+//
+// order_number 的來源不是前端產生。
+// 而是：
+//
+//     purchased_products
+//          ↓
+//     URL
+//          ↓
+//     enter_receiver_info/<order_number>/
+//          ↓
+//     Django View
+//          ↓
+//     Template
+//
+// =================================================================
+
+const orderNumberElement = document.getElementById(
+    "order_number"
+);
+
+if (!orderNumberElement) {
+
+    console.error(
+        "找不到 order_number HTML 元素。"
+    );
+
+}
+
+
+const orderNumber = (
+    orderNumberElement?.value || ""
+).trim();
+
+
+if (!orderNumber) {
+
+    console.error(
+        "找不到有效的 order_number。"
+    );
+
+}
+
+console.log(
+    "[DEBUG checkout] orderNumber =",
+    orderNumber
+);
+
+
+// =================================================================
+// 取得 CSRF Token
+// =================================================================
+
+const csrfTokenElement = document.querySelector(
+    "[name=csrfmiddlewaretoken]"
+);
+
+
+if (!csrfTokenElement) {
+
+    console.error(
+        "找不到 Django CSRF Token。"
+    );
+
+}
+
+
+const csrfToken = (
+    csrfTokenElement?.value || ""
+);
+
+
+
+// =================================================================
+// Form Submit
+// =================================================================
+
+checkoutForm.addEventListener(
+    "submit",
+    async function(event) {
+
+        /*
+        ------------------------------------------------------------
+        阻止原本 HTML Form submit
+        ------------------------------------------------------------
+        */
+
+        event.preventDefault();
+
+
+
+        /*
+        ------------------------------------------------------------
+        清除舊錯誤
+        ------------------------------------------------------------
+        */
+
+        errorMessage.style.display = "none";
+
+        errorMessage.textContent = "";
+
+
+
+        // 【新增】前端攔截：逾期訂單不送出 API
+        const orderStatusElement = document.getElementById("order_status");
+
+        if (orderStatusElement && orderStatusElement.value === "expired") {
+
+            errorMessage.textContent =
+                "此訂單已逾期未付款，無法再付款，請重新下單。";
+
+            errorMessage.style.display = "block";
+
+            return;
+
+        }
+
+
+
+        /*
+        ------------------------------------------------------------
+        【保留】
+
+        避免使用者快速連續點擊。
+
+        ------------------------------------------------------------
+        */
+
+        checkoutButton.disabled = true;
+
+        checkoutButton.textContent = "處理付款中...";
+
+
+
+        try {
+
+
+            // ====================================================
+            // 1. 確認 Order Number
+            // ====================================================
+
+            if (!orderNumber) {
+
+                throw new Error(
+                    "找不到訂單編號，無法進行結帳。"
+                );
+
+            }
+
+
+
+            // ====================================================
+            // 2. 收件人姓名
+            // ====================================================
+
+            const receiverName = document
+                .getElementById("receiver_name")
+                .value
+                .trim();
+
+
+
+            // ====================================================
+            // 3. 收件人手機
+            // ====================================================
+
+            const receiverPhone = document
+                .getElementById("receiver_phone")
+                .value
+                .trim();
+
+
+
+            // ====================================================
+            // 4. 收件地址
+            // ====================================================
+
+            const receiverAddress = document
+                .getElementById("receiver_address")
+                .value
+                .trim();
+
+
+
+            // ====================================================
+            // 5. 付款方式
+            // ====================================================
+
+            const paymentMethodElement =
+                document.querySelector(
+                    'input[name="payment_method"]:checked'
+                );
+
+
+            if (!paymentMethodElement) {
+
+                throw new Error(
+                    "請選擇付款方式。"
+                );
+
+            }
+
+
+            const paymentMethod =
+                paymentMethodElement.value;
+
+
+
+            // ====================================================
+            // 6. 訂單備註
+            // ====================================================
+
+            const remark = document
+                .getElementById("remark")
+                .value
+                .trim();
+
+
+
+            // ====================================================
+            // 7. 目前先限制 ATM
+            // ====================================================
+            //
+            // COD 尚未完成門市選擇流程。
+            //
+            // ====================================================
+
+//            if (paymentMethod === "COD") {
+
+//                throw new Error(
+//                    "目前先實作 ATM 轉帳，COD 超商門市選擇功能尚未完成。"
+//                );
+
+//            }
+
+
+
+            // ====================================================
+            // 【修改】
+            //
+            // 建立送給 CheckoutSchema 的 JSON
+            //
+            // 最重要的新增就是：
+            //
+            //     order_number
+            //
+            // ====================================================
+
+            const checkoutData = {
+
+                // ----------------------------------------------
+                // 【新增】
+                // 既有 Store Order 編號
+                // ----------------------------------------------
+
+                order_number: orderNumber,
+
+
+                // ----------------------------------------------
+                // 收件資訊
+                // ----------------------------------------------
+
+                receiver_name: receiverName,
+
+                receiver_phone: receiverPhone,
+
+                receiver_address: receiverAddress,
+
+
+                // ----------------------------------------------
+                // 付款方式
+                // ----------------------------------------------
+
+                payment_method: paymentMethod,
+
+
+                // ----------------------------------------------
+                // 備註
+                // ----------------------------------------------
+
+                remark: remark
+
+            };
+
+
+
+            // ====================================================
+            // 8. POST /api/checkout
+            // ====================================================
+
+            const response = await fetch(
+                "/api/checkout",
+                {
+
+                    method: "POST",
+
+                    headers: {
+
+                        "Content-Type":
+                            "application/json",
+
+                        "X-CSRFToken":
+                            csrfToken
+
+                    },
+
+                    body: JSON.stringify(
+                        checkoutData
+                    )
+
+                }
+            );
+
+
+
+            // ====================================================
+            // 【修改】
+            //
+            // 先讀取 response text，
+            // 再嘗試轉成 JSON。
+            //
+            // 避免後端 500 / 502 時回 HTML，
+            // 直接 response.json() 造成第二次錯誤。
+            //
+            // ====================================================
+
+            const responseText =
+                await response.text();
+
+
+            let result = null;
+
+
+            try {
+
+                result = JSON.parse(
+                    responseText
+                );
+
+            }
+            catch (parseError) {
+
+                console.error(
+                    "Checkout API 回傳不是合法 JSON：",
+                    parseError
+                );
+
+                throw new Error(
+                    `伺服器回傳格式錯誤（HTTP ${response.status}）。`
+                );
+
+            }
+
+
+
+            // ====================================================
+            // 9. 檢查 API 結果
+            // ====================================================
+
+            if (!response.ok) {
+                // HTTP 層錯誤(4xx / 5xx),先嘗試從 body 拿詳細訊息
+                throw new Error(
+                    result?.error ||
+                    result?.message ||
+                    `Checkout 失敗 (HTTP ${response.status})。`
+                );
+            }
+
+            if (!result.success) {
+                // HTTP 200 但業務邏輯判定失敗
+                throw new Error(
+                    result.error ||
+                    result.message ||
+                    "Checkout 失敗。"
+                );
+            }
+            /* ====================================================
+            // 10. Checkout 成功
+            // ====================================================
+
+            console.log(
+                "Checkout 成功：",
+                result
+            );
+
+            //====================================================
+            // 11. 【保留】
+            //
+            // 目前先回 purchased_products。
+            //
+            // 等下一步 ATM_info.html + URL 完整接好後，
+            // 這裡再改成：
+            //
+            //     /atm_info/<order_number>/
+            //
+            // 不在這一步先做不存在的 URL。
+            //
+            // ====================================================
+
+			 if (!result.atm_info_url) {
+				throw new Error(
+					"付款建立成功，但缺少 ATM 資訊頁面網址。"
+				);
+			}
+
+            window.location.href =
+               "{{ HF_SPACE_E_COMMERCE_URL }}/commerce_shop/purchased_products/";
+            window.location.href = result.atm_info_url;*/	
+			
+            // ====================================================
+            // 10. 【修改】
+            //
+            // /api/checkout 成功後：
+            //
+            //     只把 order_number
+            //     POST 到後端 ecpay_checkout_redirect
+            //
+            // ECPay payload 不在前端建立。
+            // ====================================================
+
+            console.log(
+                "【Checkout】API 成功，準備進入 ecpay_checkout_redirect",
+                result
+            );
+
+            try {
+
+                const redirectUrl =
+                    "{% url 'ecpay_checkout_redirect' %}";
+
+                console.log(
+                    "【Checkout】ecpay_checkout_redirect URL：",
+                    redirectUrl
+                );
+
+
+                // ==================================================
+                // 【新增】
+                // 建立第二個 POST Form
+                // ==================================================
+
+                const redirectForm =
+                    document.createElement(
+                        "form"
+                    );
+
+                redirectForm.method =
+                    "POST";
+
+                redirectForm.action =
+                    redirectUrl;
+
+                redirectForm.style.display =
+                    "none";
+
+
+                console.log(
+                    "【Checkout】redirectForm 建立完成：",
+                    redirectForm
+                );
+
+
+                // ==================================================
+                // 【新增】
+                // CSRF Token
+                // ==================================================
+
+                const csrfInput =
+                    document.createElement(
+                        "input"
+                    );
+
+                csrfInput.type =
+                    "hidden";
+
+                csrfInput.name =
+                    "csrfmiddlewaretoken";
+
+                csrfInput.value =
+                    csrfToken;
+
+                redirectForm.appendChild(
+                    csrfInput
+                );
+
+
+                // ==================================================
+                // 【新增】
+                // 只傳 Order Number
+                // ==================================================
+
+                const orderNumberInput =
+                    document.createElement(
+                        "input"
+                    );
+
+                orderNumberInput.type =
+                    "hidden";
+
+                orderNumberInput.name =
+                    "order_number";
+
+                orderNumberInput.value =
+                    result.order_number
+                    || orderNumber;
+
+                redirectForm.appendChild(
+                    orderNumberInput
+                );
+
+
+                console.log(
+                    "【Checkout】Order Number：",
+                    orderNumberInput.value
+                );
+
+
+                // ==================================================
+                // 【新增】
+                // 加入 document
+                // ==================================================
+
+                document.body.appendChild(
+                    redirectForm
+                );
+
+
+                console.log(
+                    "【Checkout】Form 已加入 document，"
+                    + "準備 POST"
+                );
+
+
+                // ==================================================
+                // 【新增】
+                // 真正執行 POST
+                // ==================================================
+
+                redirectForm.submit();
+
+
+                console.log(
+                    "【Checkout】redirectForm.submit() 已執行"
+                );
+
+            }
+            catch (redirectError) {
+
+                console.error(
+                    "【Checkout】前往 ECPay Redirect 失敗：",
+                    redirectError
+                );
+
+                throw new Error(
+                    "訂單更新成功，但無法前往 ECPay 付款頁面。"
+                );
+            }
+
+
+
+        }
+        catch (error) {
+
+
+            // ====================================================
+            // 錯誤處理
+            // ====================================================
+
+            console.error(
+                "Checkout 發生錯誤：",
+                error
+            );
+
+
+            errorMessage.textContent =
+                error.message ||
+                "Checkout 發生錯誤。";
+
+
+            errorMessage.style.display =
+                "block";
+
+
+            // ----------------------------------------------------
+            // 恢復按鈕
+            // ----------------------------------------------------
+
+            checkoutButton.disabled = false;
+
+            checkoutButton.textContent =
+                "確認並前往付款";
+
+        }
+
+    }
+);
+
+</script>
+
+
 </body>
+
 </html>

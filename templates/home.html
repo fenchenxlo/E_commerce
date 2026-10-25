@@ -110,6 +110,22 @@
         let loading = false; //是否正在載入中,用來避免重複呼叫API
         let hasMore = true; //是否還有更多商品載入,初始值為true
         
+		// 獲取 Django CSRF Token 的輔助函式（如果頁面沒有 getCSRFToken 可以加上這段）
+		function getCSRFToken() {
+			let cookieValue = null;
+			if (document.cookie && document.cookie !== '') {
+				const cookies = document.cookie.split(';');
+				for (let i = 0; i < cookies.length; i++) {
+					const cookie = cookies[i].trim();
+					if (cookie.substring(0, 10) === 'csrftoken=') {
+						cookieValue = decodeURIComponent(cookie.substring(10));
+						break;
+					}
+				}
+			}
+			return cookieValue;
+		}
+		
         //初始載入全部商品 (DOM 完成載入後執行)
         document.addEventListener('DOMContentLoaded', ()=>{
             console.log("DOMContentLoaded loading product");
@@ -154,7 +170,14 @@
 								actionButton = `<button type="button" class="btn btn-secondary w-100" disabled>庫存不足</button>`;
 							}
 						}
-						
+						//if (IS_AUTHENTICATED) { 
+						//	if (Number(product.stock) > 0) {
+								// 【修改點】改用 button 並綁定 onclick 事件，傳入商品 ID 與名稱
+						//		actionButton = `<button type="button" class="btn btn-primary w-100" onclick="handleAddToCart('${product.product_id}', '${product.name}')">加入購物車</button>`;
+						//	} else {
+						//		actionButton = `<button type="button" class="btn btn-secondary w-100" disabled>庫存不足</button>`;
+						//	}
+						//}
 						// 2. 將按鈕變數動態嵌入到樣板字串中
                         productList.innerHTML += `
                             <div class="col-md-4 col-lg-3 mb-4">
@@ -187,6 +210,30 @@
                 loadProducts();
             }
         });
+
+		// 處理加入購物車的非同步點擊事件
+		function handleAddToCart(productId, productName) {
+			// 呼叫後端 Django 視圖的路徑
+			fetch(`/commerce_shop/products/add/${productId}/`, {
+				method: "POST", // 改用更安全的 POST 請求
+				headers: {
+					"X-CSRFToken": getCSRFToken(), // 帶上 Django 的安全權杖
+					"X-Requested-With": "XMLHttpRequest" // 讓後端知道這是 Ajax 請求
+				}
+			})
+			.then(response => {
+				if (response.ok) {
+					alert(`${productName} 已成功加入購物車！`);
+					// 如果你右上角有購物車數量小圖示，可以在這裡寫 JS 去更新數字
+				} else {
+					alert("加入購物車失敗，請稍後再試。");
+				}
+			})
+			.catch(error => {
+				console.error("Error:", error);
+				alert("網路連線異常，加入購物車失敗。");
+			});
+		}
     </script>
     
     <div class="card-footer bg-white">
